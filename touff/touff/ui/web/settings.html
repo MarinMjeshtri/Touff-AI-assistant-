@@ -184,6 +184,10 @@
         <div><label class="f">Expressive voice clip (.wav, 10-20 s, optional)</label><input type="text" data-cfg="voice_clip" placeholder="C:\path	ooice.wav (blank = default voice)"></div>
         <div><label class="f">Lightweight voice</label><select data-cfg="voice" id="voiceSel"></select></div>
         <div><label class="f">Microphone</label><select data-cfg="mic_device" id="micSel"></select></div>
+        <div><label class="f">Ears (speech recognition)</label><select data-cfg="stt_engine">
+          <option value="auto">Auto (GPU if installed)</option>
+          <option value="gpu">GPU: Whisper large-v3-turbo (best)</option>
+          <option value="cpu">CPU: Whisper small (no GPU needed)</option></select></div>
         <div><label class="f">Speed <span id="spdV"></span></label><input type="range" min="0.7" max="1.5" step="0.05" data-cfg="speech_speed" data-num></div>
         <div><label class="f">Volume <span id="volV"></span></label><input type="range" min="0.3" max="2" step="0.05" data-cfg="volume" data-num></div>
       </div>
@@ -217,6 +221,12 @@
       <label class="f">How often she pushes back: <span id="feistyV"></span>%</label>
       <input type="range" min="0" max="100" step="5" data-cfg="feisty_level" data-num>
       <label class="toggle"><input type="checkbox" data-cfg="feisty_swearing"> Allow swearing 🤬</label>
+    </div>
+    <div class="card dev">
+      <b>Debugging</b>
+      <label class="toggle"><input type="checkbox" data-cfg="save_recordings"> Save my last 30 recordings (to replay what she misheard)</label>
+      <p class="muted">Saved in %APPDATA%&#92;Touff&#92;recordings, named after what she thought you said.</p>
+ecordings, named after what she thought you said.</p>
     </div>
   </section>
 </main>
@@ -316,7 +326,7 @@ document.querySelectorAll("[data-cfg]").forEach((el) => {
 });
 async function save(key, value) {
   S = await api().save_config({ [key]: value }); render();
-  if (["voice", "voice_engine", "voice_clip"].includes(key)) toast("Switching voice... she'll say something when ready");
+  if (["voice", "voice_engine", "voice_clip", "stt_engine"].includes(key)) toast("Switching voice... she'll say something when ready");
   else if (key === "mic_device") toast("Mic change applies after restarting Touff");
   else toast("Saved ✓");
 }

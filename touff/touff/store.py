@@ -27,9 +27,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "volume": 1.0,
     "brain": "claude",  # "claude" (Claude Code CLI) or "offline"
     "claude_model": "haiku",
-    "whisper_model": "base.en",
+    "stt_engine": "auto",  # "auto"/"gpu" (Whisper large-v3-turbo in the GPU worker) or "cpu"
+    "gpu_whisper_model": "large-v3-turbo",
+    "whisper_model": "small.en",  # CPU fallback
     "mic_device": None,
-    "silence_ms": 800,
+    "silence_ms": 1200,
     "max_listen_s": 12,
     "chime": True,
     "popup": True,
@@ -39,6 +41,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "feisty_level": 35,  # % of locally understood requests she gets to argue about
     "feisty_swearing": False,
     "dev_unlocked": False,
+    "save_recordings": False,  # keep the last 30 utterances as .wav in %APPDATA%\Touff\recordings
+    "config_version": 2,
 }
 
 DEFAULT_COMMANDS: list[dict[str, Any]] = [
@@ -95,6 +99,7 @@ class Store:
         self._listeners: list[Callable[[str], None]] = []
         self.config = self._load("config.json", DEFAULT_CONFIG)
         # Fill in keys added in newer versions without clobbering user values.
+        self._migrate()
         for key, value in DEFAULT_CONFIG.items():
             self.config.setdefault(key, copy.deepcopy(value))
         self.commands = self._load("commands.json", DEFAULT_COMMANDS)
@@ -102,6 +107,16 @@ class Store:
         for key, value in DEFAULT_MEMORIES.items():
             self.memories.setdefault(key, copy.deepcopy(value))
         self.history = self._load("history.json", [])
+
+    def _migrate(self) -> None:
+        """Move old installs onto new defaults, but only where the user never changed them."""
+        version = self.config.get("config_version", 1)
+        if version < 2:
+            if self.config.get("silence_ms") == 800:  # cut people off mid-sentence
+                self.config["silence_ms"] = 1200
+            if self.config.get("whisper_model") == "base.en":  # too weak
+                self.config["whisper_model"] = "small.en"
+        self.config["config_version"] = DEFAULT_CONFIG["config_version"]
 
     # -- persistence -------------------------------------------------------
 

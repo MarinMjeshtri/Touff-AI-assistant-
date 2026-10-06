@@ -18,6 +18,31 @@ from .store import Store
 log = logging.getLogger(__name__)
 
 
+# Apps whose names speech recognition tends to mangle; hinted when installed.
+_COMMON_APPS = [
+    "Google Chrome", "Claude", "Spotify", "Discord", "Steam", "Microsoft Edge", "Visual Studio Code", "Notepad",
+    "File Explorer", "WhatsApp", "Instagram", "Roblox", "Minecraft Launcher", "League of Legends", "Figma",
+    "Blender", "Canva", "CapCut", "Medal", "Google", "YouTube",
+]
+
+# Words a sentence rarely ends on: if it does, the speaker probably just paused.
+_DANGLING = {
+    "the", "a", "an", "to", "my", "on", "in", "into", "of", "for", "with", "and", "or", "but", "at", "from",
+    "is", "are", "can", "could", "please", "then", "your", "this", "that", "some", "like", "um", "uh",
+    "by", "about", "so", "because", "if", "when", "than", "as", "me", "also",
+}
+
+
+def sounds_unfinished(text: str) -> bool:
+    t = text.strip().lower()
+    if not t:
+        return False
+    if t.endswith(("...", "..", "…", ",", "-")):
+        return True
+    last = t.rstrip(".!?").split()[-1] if t.rstrip(".!?").split() else ""
+    return last in _DANGLING and not t.endswith(("?", "!"))
+
+
 class UI(Protocol):
     def show(self, state: str) -> None: ...  # idle | listening | thinking | speaking | sassy
     def heard(self, text: str) -> None: ...
@@ -56,6 +81,7 @@ class Assistant:
         self.wake = None
         self.stt = None
         self.voice = None
+        self.gpu = None
         self.ready = threading.Event()
         self.quit = threading.Event()
         self.paused = threading.Event()  # "mute mic" from the tray
@@ -72,36 +98,61 @@ class Assistant:
         """Download (first run) and load all models. Slow: call from a worker thread."""
         from . import models
         from .audio.mic import Mic
-        from .audio.stt import STT
-        from .audio.tts import Voice
         from .audio.wakeword import WakeWord
 
         cfg = self.store.config
         self.ui.status("Waking up my ears...")
         self.wake = WakeWord(models.vosk_path(), self._wake_words())
-        self.voice = self._load_voice()
-        self.ui.status("Loading speech recognition...")
-        self.stt = STT(models.whisper_path(cfg["whisper_model"]))
+        self.start_engines()
         self.mic = Mic(cfg.get("mic_device"))
         self.mic.start()
         self.ready.set()
         self.ui.status("Ready")
 
-    def _load_voice(self):
-        from . import models
+    def start_engines(self) -> None:
+        """(Re)start the voice and the speech recognition according to the config.
+
+        With the GPU environment installed, both live in one GPU worker process:
+        expressive Chatterbox voice + Whisper large-v3-turbo. Otherwise (or if the
+        worker fails) Piper and CPU Whisper take over.
+        """
         from .audio import expressive
+
+        cfg = self.store.config
+        if self.gpu is not None:  # free the VRAM before loading again
+            self.gpu.close()
+            self.gpu = None
+        want_tts = cfg.get("voice_engine", "auto") in ("auto", "expressive")
+        want_stt = cfg.get("stt_engine", "auto") in ("auto", "gpu")
+        if expressive.available() and (want_tts or want_stt):
+            self.ui.status("Warming up my GPU voice and ears...")
+            try:
+                self.gpu = expressive.GpuServer(want_tts, cfg["gpu_whisper_model"] if want_stt else None, cfg.get("voice_clip", ""))
+            except Exception:
+                log.exception("GPU worker failed, using CPU voice and ears")
+        if self.gpu and self.gpu.has_tts:
+            self.voice = expressive.ExpressiveVoice(self.gpu, cfg["volume"])
+        else:
+            self.voice = self._piper()
+        if self.gpu and self.gpu.has_stt:
+            self.stt = expressive.RemoteSTT(self.gpu)
+        else:
+            self.stt = self._cpu_stt()
+
+    def _piper(self):
+        from . import models
         from .audio.tts import Voice
 
         cfg = self.store.config
-        engine = cfg.get("voice_engine", "auto")
-        if engine in ("auto", "expressive") and expressive.available():
-            self.ui.status("Warming up my expressive voice...")
-            try:
-                return expressive.ExpressiveVoice(cfg.get("voice_clip", ""), cfg["volume"])
-            except Exception:
-                log.exception("expressive voice failed, falling back to Piper")
         self.ui.status("Warming up my voice...")
         return Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
+
+    def _cpu_stt(self):
+        from . import models
+        from .audio.stt import STT
+
+        self.ui.status("Loading speech recognition...")
+        return STT(models.whisper_path(self.store.config["whisper_model"]))
 
     def _wake_words(self) -> list[str]:
         cfg = self.store.config
@@ -116,11 +167,8 @@ class Assistant:
         self.voice.volume = cfg["volume"]
 
     def change_voice(self) -> None:
-        """Reload the voice after the engine, Piper voice or clip changed in settings."""
-        old = self.voice
-        self.voice = self._load_voice()
-        if old is not None and hasattr(old, "close"):
-            old.close()
+        """Reload after the voice engine, Piper voice, clip or ears changed in settings."""
+        self.start_engines()
 
     # -- talking ---------------------------------------------------------------
 
@@ -136,11 +184,7 @@ class Assistant:
             except Exception:
                 # The GPU voice died or choked: say it with Piper instead of going mute.
                 log.exception("voice failed")
-                from . import models
-                from .audio.tts import Voice
-
-                cfg = self.store.config
-                self.voice = Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
+                self.voice = self._piper()
                 self.voice.speak(text)
         finally:
             with self._mute_lock:
@@ -184,13 +228,39 @@ class Assistant:
         return reply
 
     def _hint(self) -> str:
-        """Words Whisper should expect, so it spells names and slang the way the user does."""
+        """Words Whisper should expect, so it spells names and slang the way the user does
+        ("Claude", not "cloud"; "Chrome", not "crown")."""
         cfg = self.store.config
-        words = [cfg["name"]]
-        words += [p for c in self.store.commands for p in c["phrases"]][:25]
-        words += [g["term"] for g in self.store.memories["glossary"]][:25]
-        words += [a.name for a in self.apps.apps if a.kind == "steam"][:15]
-        return f"{cfg['name']}, open Spotify. " + ", ".join(dict.fromkeys(words)) + "."
+        words = [p for c in self.store.commands for p in c["phrases"]][:20]
+        words += [g["term"] for g in self.store.memories["glossary"]][:20]
+        installed = {a.name.lower() for a in self.apps.apps}
+        words += [w for w in _COMMON_APPS if w.lower() in installed or w in ("Google", "YouTube")]
+        words += [a.name for a in self.apps.apps if a.kind == "steam"][:12]
+        return f"{cfg['name']}, open Chrome on my second monitor. " + ", ".join(dict.fromkeys(words)) + "."
+
+    def _save_recording(self, audio: bytes, text: str) -> None:
+        import re
+        import wave
+
+        folder = self.store.root / "recordings"
+        folder.mkdir(exist_ok=True)
+        name = time.strftime("%Y%m%d-%H%M%S-") + (re.sub(r"[^\w]+", "_", text.lower())[:40] or "silence") + ".wav"
+        with wave.open(str(folder / name), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(audio)
+        for old in sorted(folder.glob("*.wav"))[:-30]:
+            old.unlink()
+
+    def _transcribe(self, audio: bytes) -> str:
+        try:
+            return self.stt.transcribe(audio, hint=self._hint())
+        except Exception:
+            # GPU worker gone? Fall back to the CPU model rather than going deaf.
+            log.exception("speech recognition failed, falling back to CPU")
+            self.stt = self._cpu_stt()
+            return self.stt.transcribe(audio, hint=self._hint())
 
     # -- the loop ----------------------------------------------------------------
 
@@ -229,7 +299,22 @@ class Assistant:
                 if audio is None:
                     break
                 self.ui.show("thinking")
-                text = self.stt.transcribe(audio, hint=self._hint())
+                text = self._transcribe(audio)
+                # Paused mid-thought ("move chrome to the...")? Keep listening and
+                # transcribe the whole thing together.
+                for _ in range(2):
+                    if not sounds_unfinished(text):
+                        break
+                    self.ui.heard(text + " ...")
+                    self.ui.show("listening")
+                    more = record_utterance(self.mic, None, cfg["silence_ms"], cfg["max_listen_s"], start_timeout=2.5, should_stop=self.quit.is_set)
+                    if more is None:
+                        break
+                    audio += more
+                    self.ui.show("thinking")
+                    text = self._transcribe(audio)
+                if cfg.get("save_recordings"):
+                    self._save_recording(audio, text)
                 heard = strip_name(text, self._wake_words(), fuzzy=turn == 0 and bool(preroll))
                 self.ui.heard(text or "...")
                 if not heard and turn == 0 and text:

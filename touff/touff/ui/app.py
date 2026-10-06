@@ -133,7 +133,7 @@ class Api:
 
     def save_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         store = self._app.store
-        voice_keys = ("voice", "voice_engine", "voice_clip")
+        voice_keys = ("voice", "voice_engine", "voice_clip", "stt_engine")
         old = {k: store.config.get(k) for k in voice_keys}
         store.update_config(changes)
         if "start_with_windows" in changes:

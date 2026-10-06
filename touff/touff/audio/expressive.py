@@ -1,12 +1,13 @@
-"""Client for the expressive GPU voice (voice_server.py in .venv-voice).
+"""Client for the GPU worker (voice_server.py running in .venv-voice).
 
-Same interface as tts.Voice: speak(text), stop(), .level, .speed, .volume.
-Sentences are synthesized one after another while earlier ones already play,
-so she starts talking after the first sentence is ready, not the whole reply.
+GpuServer owns the process. ExpressiveVoice and RemoteSTT sit on top of it with the
+same interfaces as the CPU versions (tts.Voice / stt.STT), so the assistant doesn't
+care where the work happens.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import queue
@@ -14,7 +15,6 @@ import re
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import sounddevice as sd
@@ -61,27 +61,32 @@ def split_sentences(text: str) -> list[str]:
     return [c if i == 0 or not emotion or c.startswith("[") else f"{emotion} {c}" for i, c in enumerate(chunks)]
 
 
-class ExpressiveVoice:
-    def __init__(self, clip: str = "", volume: float = 1.0, status: Callable[[str], None] | None = None):
-        self.volume = volume
-        self.speed = 1.0  # Turbo has no speed control; kept for interface parity
-        self.level = 0.0
-        self._stop = threading.Event()
-        self._lock = threading.Lock()
-        self._next_id = 0
-        self._results: dict[int, queue.Queue] = {}
+class GpuServer:
+    def __init__(self, tts: bool, stt_model: str | None, clip: str = ""):
         env = dict(os.environ, HF_HOME=str(models_dir() / "hf"), HF_HUB_DISABLE_PROGRESS_BARS="1", PYTHONIOENCODING="utf-8")
-        cmd = [str(VOICE_PYTHON), str(SERVER), "--engine", "turbo"]
+        cmd = [
+            str(VOICE_PYTHON), str(SERVER),
+            "--engine", "turbo" if tts else "none",
+            "--stt", stt_model or "none",
+            "--models", str(models_dir() / "whisper-gpu"),
+        ]
         if clip:
             cmd += ["--clip", clip]
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        hello = self.proc.stdout.readline()  # blocks while the model loads (~15 s, first run downloads ~1.5 GB)
+        hello = self.proc.stdout.readline()  # blocks while models load (~20 s; first run downloads several GB)
         if not hello:
-            raise RuntimeError("expressive voice failed to start")
-        self.rate = int(json.loads(hello)["sr"])
+            raise RuntimeError("GPU voice server failed to start")
+        info = json.loads(hello)
+        self.rate = int(info.get("sr") or 0)
+        self.has_tts = bool(info.get("tts"))
+        self.has_stt = bool(info.get("stt"))
+        self._next_id = 0
+        self._id_lock = threading.Lock()
+        self._write_lock = threading.Lock()
+        self._results: dict[int, queue.Queue] = {}
         threading.Thread(target=self._reader, daemon=True).start()
 
     def _reader(self) -> None:
@@ -90,21 +95,63 @@ class ExpressiveVoice:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            q = self._results.get(msg.get("id"))
+            q = self._results.pop(msg.get("id"), None)
             if q is not None:
                 q.put(msg)
 
-    def _request(self, text: str) -> queue.Queue:
-        self._next_id += 1
+    def request(self, payload: dict) -> queue.Queue:
+        with self._id_lock:
+            self._next_id += 1
+            rid = self._next_id
         q: queue.Queue = queue.Queue()
-        self._results[self._next_id] = q
-        self.proc.stdin.write(json.dumps({"id": self._next_id, "text": text}) + "\n")
-        self.proc.stdin.flush()
+        self._results[rid] = q
+        self.send({**payload, "id": rid})
         return q
+
+    def send(self, payload: dict) -> None:
+        with self._write_lock:
+            self.proc.stdin.write(json.dumps(payload) + "\n")
+            self.proc.stdin.flush()
 
     @property
     def alive(self) -> bool:
         return self.proc.poll() is None
+
+    def close(self) -> None:
+        try:
+            self.send({"cmd": "quit"})
+            self.proc.wait(timeout=5)
+        except Exception:
+            self.proc.kill()
+
+
+class RemoteSTT:
+    """Whisper large-v3-turbo on the GPU: much better ears than the small CPU model."""
+
+    def __init__(self, server: GpuServer):
+        self.server = server
+
+    def transcribe(self, pcm16: bytes, hint: str = "") -> str:
+        msg = self.server.request({"cmd": "stt", "pcm": base64.b64encode(pcm16).decode("ascii"), "hint": hint}).get(timeout=30)
+        if "error" in msg:
+            raise RuntimeError(msg["error"])
+        return msg["text"]
+
+
+class ExpressiveVoice:
+    """Same interface as tts.Voice: speak(text), stop(), .level, .speed, .volume.
+
+    Sentences are synthesized one after another while earlier ones already play,
+    so she starts talking after the first sentence, not the whole reply.
+    """
+
+    def __init__(self, server: GpuServer, volume: float = 1.0):
+        self.server = server
+        self.volume = volume
+        self.speed = 1.0  # Turbo has no speed control; kept for interface parity
+        self.level = 0.0
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
 
     def stop(self) -> None:
         self._stop.set()
@@ -115,7 +162,7 @@ class ExpressiveVoice:
             return
         with self._lock:
             self._stop.clear()
-            pending = [self._request(s) for s in split_sentences(text)]  # server works through them in order
+            pending = [self.server.request({"text": s}) for s in split_sentences(text)]  # worked through in order
             for q in pending:
                 msg = q.get(timeout=60)
                 if self._stop.is_set():
@@ -139,13 +186,4 @@ class ExpressiveVoice:
                 out.write(block.reshape(-1, 1))
 
     def set_clip(self, path: str) -> None:
-        self.proc.stdin.write(json.dumps({"cmd": "clip", "path": path}) + "\n")
-        self.proc.stdin.flush()
-
-    def close(self) -> None:
-        try:
-            self.proc.stdin.write(json.dumps({"cmd": "quit"}) + "\n")
-            self.proc.stdin.flush()
-            self.proc.wait(timeout=5)
-        except Exception:
-            self.proc.kill()
+        self.server.send({"cmd": "clip", "path": path})

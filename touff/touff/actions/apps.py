@@ -130,7 +130,7 @@ class AppIndex:
     def find(self, query: str) -> App | None:
         query = normalize(query)
         query = re.sub(r"^(?:the|my|up)\s+", "", query)
-        query = re.sub(r"\s+(?:app|application|game|program|folder|website|site)$", "", query)
+        query = re.sub(r"\s+(?:app|application|game|program|folder|website|site|window|screen|tab)$", "", query)
         if not query:
             return None
         query = NICKNAMES.get(query, query)
@@ -140,15 +140,21 @@ class AppIndex:
         # Exact name wins outright ("x" must not fuzzy-match "xbox").
         if query in names:
             return apps[names.index(query)]
-        for name, score, idx in process.extract(query, names, scorer=fuzz.WRatio, score_cutoff=MATCH_THRESHOLD, limit=5):
-            # WRatio's partial matching is generous: "spotify and play candy shop" scores 90
-            # against "spotify", and 3-letter queries match half the Start Menu.
-            if len(query) > len(name) * 1.6 + 4:
-                continue
-            if len(query) <= 3 and score < 95:
+        for name, score, idx in process.extract(query, names, scorer=_app_score, score_cutoff=MATCH_THRESHOLD, limit=5):
+            if len(query) <= 3 and score < 95:  # 3-letter queries match half the Start Menu
                 continue
             return apps[idx]
         return None
+
+
+def _app_score(query: str, name: str, **_) -> float:
+    """Whole-name similarity, plus partial matching only when the query is the *shorter*
+    one ("binding of isaac" -> "The Binding of Isaac: Rebirth"). The reverse lets one
+    shared word win: "cloud on my second monitor" must not open "Resource Monitor"."""
+    score = max(fuzz.ratio(query, name), fuzz.token_sort_ratio(query, name))
+    if len(query) <= len(name):
+        score = max(score, fuzz.partial_ratio(query, name) * 0.95, fuzz.token_set_ratio(query, name) * 0.95)
+    return score
 
 
 # -- scanners -----------------------------------------------------------------
