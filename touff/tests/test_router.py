@@ -162,3 +162,10 @@ def test_yes_no():
 
 def test_intents_dont_eat_learning():
     assert intents.parse("when i say lights out lock the computer").kind == "learn"
+
+
+def test_strip_name_fuzzy_only_after_wake():
+    names = ["touff", "tough", "toff"]
+    assert strip_name("Tuff, open Spotify", names, fuzzy=True) == "open spotify"
+    assert strip_name("turn it up", names, fuzzy=True) == "turn it up"
+    assert strip_name("Tuff open Spotify", names) == "tuff open spotify"

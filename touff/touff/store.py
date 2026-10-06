@@ -19,7 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "name": "Touff",
     # Words the wake-word engine listens for. The name itself is often not in the
     # speech model's vocabulary, so sound-alike words are listened for as well.
-    "wake_words": ["touff", "tough", "toff"],
+    "wake_words": ["tough", "tuff", "toff"],
     "voice": "en_GB-jenny_dioco-medium",
     "speech_speed": 1.0,
     "volume": 1.0,
@@ -36,6 +36,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "feisty_mode": False,
     "feisty_level": 35,  # % of locally understood requests she gets to argue about
     "feisty_swearing": False,
+    "dev_unlocked": False,
 }
 
 DEFAULT_COMMANDS: list[dict[str, Any]] = [
@@ -63,9 +64,16 @@ def data_dir() -> Path:
     return path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 def models_dir() -> Path:
+    """Big downloaded models. Running from source they live next to the code (git-ignored),
+    which also keeps them out of AppData folders that sandboxed launchers redirect."""
     if os.environ.get("TOUFF_HOME"):
         path = Path(os.environ["TOUFF_HOME"]) / "models"
+    elif (PROJECT_ROOT / "pyproject.toml").exists():
+        path = PROJECT_ROOT / "models"
     else:
         path = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Touff" / "models"
     path.mkdir(parents=True, exist_ok=True)

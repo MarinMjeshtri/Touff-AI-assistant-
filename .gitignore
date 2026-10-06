@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.pyc
-.venv/
+.venv*/
 *.egg-info/
 build/
 dist/
@@ -15,3 +15,6 @@ GoldPen.ex5
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Portable Python used by the venvs (uv python install)
+touff/.python/

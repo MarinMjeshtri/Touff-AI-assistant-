@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Touff</title>
+<style>
+  :root { --c1: #e6d2ff; --c2: #a774ff; --c3: #6c3cf0; --ink: #1d1430; --lvl: 0; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: flex-end;
+    gap: 8px; padding: 8px 10px 10px; box-sizing: border-box;
+    opacity: 0; transform: translateY(18px) scale(.94);
+    transition: opacity .28s ease, transform .4s cubic-bezier(.2, 1.5, .4, 1); }
+  #wrap.on { opacity: 1; transform: none; }
+
+  /* speech bubble */
+  .bubble { max-width: 230px; margin-bottom: 30px; padding: 10px 14px; border-radius: 18px 18px 4px 18px;
+    background: rgba(22, 16, 38, .93); color: #f5f0ff; font-size: 14px; line-height: 1.35;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .35); transition: opacity .2s, transform .2s; }
+  .bubble.empty { opacity: 0; transform: translateX(8px); }
+  .heard { color: #ab9fcf; font-size: 12px; font-style: italic; margin-bottom: 3px; }
+  .heard:empty { display: none; }
+  .said:empty::before { content: "\2026"; color: #8c7fb0; }
+
+  /* the blob */
+  .blob { position: relative; width: 120px; height: 120px; flex: none; }
+  .ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--c2); opacity: 0; }
+  .body { position: absolute; inset: 8px;
+    background: radial-gradient(circle at 34% 28%, var(--c1) 0, var(--c2) 42%, var(--c3) 100%);
+    box-shadow: 0 10px 28px rgba(120, 70, 255, .45), inset -8px -12px 22px rgba(50, 15, 120, .35);
+    animation: wobble 5s ease-in-out infinite;
+    transform: scale(calc(1 + var(--lvl) * .1)); transition: transform .07s, background .4s; }
+  @keyframes wobble {
+    0%, 100% { border-radius: 52% 48% 46% 54% / 55% 50% 50% 45%; }
+    33% { border-radius: 46% 54% 52% 48% / 48% 56% 44% 52%; }
+    66% { border-radius: 55% 45% 48% 52% / 52% 46% 54% 48%; }
+  }
+  .face { position: absolute; inset: 0; transition: transform .3s; }
+  .eye { position: absolute; top: 40%; width: 13px; height: 19px; background: var(--ink); border-radius: 50%;
+    animation: blink 4.7s infinite; transition: height .2s, top .2s; }
+  .eye.l { left: 33%; } .eye.r { right: 33%; animation-delay: .02s; }
+  .eye::after { content: ""; position: absolute; width: 5px; height: 5px; top: 4px; left: 3px; background: #fff; border-radius: 50%; }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+  .brow { position: absolute; top: 31%; width: 16px; height: 4px; background: var(--ink); border-radius: 3px; opacity: 0; transition: .25s; }
+  .brow.l { left: 30%; } .brow.r { right: 30%; }
+  .mouth { position: absolute; left: 50%; top: 63%; width: 18px; transform: translateX(-50%);
+    height: calc(5px + var(--lvl) * 15px); background: var(--ink); border-radius: 3px 3px 12px 12px; transition: height .06s, width .2s, border-radius .2s; }
+  .cheek { position: absolute; top: 58%; width: 14px; height: 8px; border-radius: 50%; background: rgba(255, 120, 180, .55); }
+  .cheek.l { left: 20%; } .cheek.r { right: 20%; }
+  .dots { position: absolute; inset: -6px; opacity: 0; animation: spin 1.4s linear infinite; }
+  .dots i { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--c2); }
+  .dots i:nth-child(1) { top: 0; left: 50%; } .dots i:nth-child(2) { bottom: 14%; left: 8%; opacity: .7; } .dots i:nth-child(3) { bottom: 14%; right: 8%; opacity: .4; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status { position: absolute; right: 0; bottom: -2px; width: 140px; text-align: center; font-size: 11px; color: #d9ccff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .8); }
+
+  /* states */
+  .listening .ring { animation: ping 1.3s ease-out infinite; }
+  @keyframes ping { from { transform: scale(.8); opacity: .8; } to { transform: scale(1.15); opacity: 0; } }
+  .listening .mouth { width: 10px; height: 10px; border-radius: 50%; }
+  .thinking .dots { opacity: 1; }
+  .thinking .face { transform: translate(5px, -5px); }
+  .thinking .mouth { width: 12px; height: 4px; border-radius: 3px; }
+  .idle .mouth { height: 6px; border-radius: 0 0 12px 12px; }
+  .sassy { --c1: #ffd0dc; --c2: #ff6f91; --c3: #d6245a; }
+  .sassy .brow { opacity: 1; }
+  .sassy .brow.l { transform: translateY(-5px) rotate(-14deg); }
+  .sassy .brow.r { transform: rotate(10deg); }
+  .sassy .eye { height: 11px; top: 43%; }
+  .sassy .mouth { border-radius: 12px 3px 12px 3px; }
+  .sassy .body { animation: wobble 5s ease-in-out infinite, huff 1.8s ease-in-out infinite; }
+  @keyframes huff { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
+</style>
+</head>
+<body>
+<div id="wrap" class="idle">
+  <div class="bubble empty" id="bubble">
+    <div class="heard" id="heard"></div>
+    <div class="said" id="said"></div>
+  </div>
+  <div class="blob">
+    <div class="ring"></div>
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div class="body">
+      <div class="face">
+        <div class="brow l"></div><div class="brow r"></div>
+        <div class="eye l"></div><div class="eye r"></div>
+        <div class="cheek l"></div><div class="cheek r"></div>
+        <div class="mouth"></div>
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+<script>
+  const wrap = document.getElementById("wrap");
+  const bubble = document.getElementById("bubble");
+  const $ = (id) => document.getElementById(id);
+  let fresh = true;
+
+  function setState(state) {
+    wrap.className = state + " on";
+    if (state === "listening" && fresh) { $("heard").textContent = ""; $("said").textContent = ""; bubble.classList.add("empty"); }
+    fresh = false;
+  }
+  function setHeard(text) {
+    $("heard").textContent = "“" + text + "”";
+    $("said").textContent = "";
+    bubble.classList.remove("empty");
+  }
+  function setSaid(text) {
+    $("said").textContent = text;
+    bubble.classList.toggle("empty", !text && !$("heard").textContent);
+  }
+  function setStatus(text) { $("status").textContent = text === "Ready" ? "" : text; }
+  function lvl(x) { document.documentElement.style.setProperty("--lvl", x); }
+  function fadeOut() { wrap.classList.remove("on"); fresh = true; }
+</script>
+</body>
+</html>

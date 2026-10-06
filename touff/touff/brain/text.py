@@ -24,16 +24,24 @@ def normalize(text: str) -> str:
     return _SPACES.sub(" ", text).strip()
 
 
-def strip_name(text: str, names: list[str]) -> str:
+def strip_name(text: str, names: list[str], fuzzy: bool = False) -> str:
     """Remove the assistant's name (and sound-alikes) from the start of a sentence."""
+    from rapidfuzz import fuzz
+
     t = normalize(text)
+    names = sorted({normalize(n) for n in names if n}, key=len, reverse=True)
     for _ in range(2):  # "hey touff, touff open spotify"
         t = _LEADING_FILLER.sub("", t)
-        for name in sorted({n.lower() for n in names if n}, key=len, reverse=True):
+        for name in names:
             if t == name:
                 return ""
             if t.startswith(name + " "):
                 t = t[len(name) + 1 :]
+        # Whisper spells made-up names creatively ("Tuff", "Toof"): drop a first
+        # word that sounds close enough to the name.
+        first, _, rest = t.partition(" ")
+        if fuzzy and len(first) >= 3 and any(fuzz.ratio(first, n) >= 75 for n in names if " " not in n):
+            t = rest
     return t.strip()
 
 
