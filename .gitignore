@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Downloaded speech/voice models (fetched by scripts/download_models.py)
+models/
+
+# Unrelated MetaTrader binary that lives in this folder
+GoldPen.ex5
+
+# Local Claude Code settings
+.claude/settings.local.json
