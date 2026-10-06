@@ -28,7 +28,9 @@ class Voice:
     def speak(self, text: str, on_level: Callable[[float], None] | None = None) -> None:
         from piper import SynthesisConfig
 
-        text = text.strip()
+        from ..brain.text import strip_tags
+
+        text = strip_tags(text)  # Piper would read "[laugh]" out loud
         if not text:
             return
         config = SynthesisConfig(length_scale=1.0 / max(0.5, min(2.0, self.speed)), volume=self.volume)

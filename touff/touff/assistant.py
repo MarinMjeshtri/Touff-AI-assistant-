@@ -12,7 +12,7 @@ from .actions.registry import Executor
 from .brain import personality as P
 from .brain.claude_cli import ClaudeBrain
 from .brain.router import Reply, Router, answer_yes_no
-from .brain.text import strip_name
+from .brain.text import strip_name, strip_tags
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -79,14 +79,29 @@ class Assistant:
         cfg = self.store.config
         self.ui.status("Waking up my ears...")
         self.wake = WakeWord(models.vosk_path(), self._wake_words())
-        self.ui.status("Warming up my voice...")
-        self.voice = Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
+        self.voice = self._load_voice()
         self.ui.status("Loading speech recognition...")
         self.stt = STT(models.whisper_path(cfg["whisper_model"]))
         self.mic = Mic(cfg.get("mic_device"))
         self.mic.start()
         self.ready.set()
         self.ui.status("Ready")
+
+    def _load_voice(self):
+        from . import models
+        from .audio import expressive
+        from .audio.tts import Voice
+
+        cfg = self.store.config
+        engine = cfg.get("voice_engine", "auto")
+        if engine in ("auto", "expressive") and expressive.available():
+            self.ui.status("Warming up my expressive voice...")
+            try:
+                return expressive.ExpressiveVoice(cfg.get("voice_clip", ""), cfg["volume"])
+            except Exception:
+                log.exception("expressive voice failed, falling back to Piper")
+        self.ui.status("Warming up my voice...")
+        return Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
 
     def _wake_words(self) -> list[str]:
         cfg = self.store.config
@@ -100,12 +115,12 @@ class Assistant:
         self.voice.speed = cfg["speech_speed"]
         self.voice.volume = cfg["volume"]
 
-    def change_voice(self, voice_id: str) -> None:
-        from . import models
-        from .audio.tts import Voice
-
-        cfg = self.store.config
-        self.voice = Voice(models.voice_path(voice_id), cfg["speech_speed"], cfg["volume"])
+    def change_voice(self) -> None:
+        """Reload the voice after the engine, Piper voice or clip changed in settings."""
+        old = self.voice
+        self.voice = self._load_voice()
+        if old is not None and hasattr(old, "close"):
+            old.close()
 
     # -- talking ---------------------------------------------------------------
 
@@ -116,7 +131,17 @@ class Assistant:
             self._mute_count += 1
             self.mic.muted.set()
         try:
-            self.voice.speak(text)
+            try:
+                self.voice.speak(text)
+            except Exception:
+                # The GPU voice died or choked: say it with Piper instead of going mute.
+                log.exception("voice failed")
+                from . import models
+                from .audio.tts import Voice
+
+                cfg = self.store.config
+                self.voice = Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
+                self.voice.speak(text)
         finally:
             with self._mute_lock:
                 self._mute_count -= 1
@@ -128,7 +153,7 @@ class Assistant:
     def announce(self, text: str) -> None:
         """Speak out of the blue (timers)."""
         self.ui.show("speaking")
-        self.ui.said(text)
+        self.ui.said(strip_tags(text))
         self.speak(text)
         if not self.busy:
             self.ui.hide(2.5)
@@ -155,7 +180,7 @@ class Assistant:
         if problems:
             fix = problems[0][0].upper() + problems[0][1:] + "."
             reply.say = fix if reply.source != "claude" else f"{reply.say} {fix}".strip()
-        self.store.log(heard, reply.say, reply.actions, reply.source)
+        self.store.log(heard, strip_tags(reply.say), reply.actions, reply.source)
         return reply
 
     def _hint(self) -> str:
@@ -216,7 +241,7 @@ class Assistant:
                     reply = self.handle_text(heard, pending)
                 sassy = cfg.get("feisty_mode") and reply.source == "claude" and not reply.actions
                 self.ui.show("sassy" if sassy else "speaking")
-                self.ui.said(reply.say)
+                self.ui.said(strip_tags(reply.say))
                 self.speak(reply.say)
                 if not (reply.listen_again or reply.on_yes):
                     break

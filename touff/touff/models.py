@@ -85,9 +85,12 @@ def voice_path(voice: str, progress: Progress | None = None) -> Path:
 
 
 def whisper_path(size: str) -> str:
+    target = models_dir() / f"whisper-{size}"
+    if (target / "model.bin").exists():  # already here: don't ping Hugging Face on every start
+        return str(target)
     from faster_whisper import download_model
 
-    return download_model(size, output_dir=str(models_dir() / f"whisper-{size}"))
+    return download_model(size, output_dir=str(target))
 
 
 def ensure_all(voice: str, whisper: str, progress: Progress | None = None) -> None:

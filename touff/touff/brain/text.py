@@ -45,6 +45,14 @@ def strip_name(text: str, names: list[str], fuzzy: bool = False) -> str:
     return t.strip()
 
 
+_TAGS = re.compile(r"\[[a-z ]{2,20}\]\s*")
+
+
+def strip_tags(text: str) -> str:
+    """Remove voice performance tags ([laugh], [angry]...) for display or plain voices."""
+    return _SPACES.sub(" ", _TAGS.sub("", text)).strip()
+
+
 def strip_filler(text: str) -> str:
     t = _LEADING_FILLER.sub("", text)
     return _TRAILING_FILLER.sub("", t).strip()

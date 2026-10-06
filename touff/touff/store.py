@@ -20,7 +20,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Words the wake-word engine listens for. The name itself is often not in the
     # speech model's vocabulary, so sound-alike words are listened for as well.
     "wake_words": ["tough", "tuff", "toff"],
-    "voice": "en_GB-jenny_dioco-medium",
+    "voice_engine": "auto",  # "auto" | "expressive" (GPU, Chatterbox Turbo) | "piper" (light, CPU)
+    "voice_clip": "",  # wav to clone for the expressive voice; "" = built-in voice
+    "voice": "en_GB-jenny_dioco-medium",  # Piper voice
     "speech_speed": 1.0,
     "volume": 1.0,
     "brain": "claude",  # "claude" (Claude Code CLI) or "offline"

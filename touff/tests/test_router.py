@@ -169,3 +169,21 @@ def test_strip_name_fuzzy_only_after_wake():
     assert strip_name("Tuff, open Spotify", names, fuzzy=True) == "open spotify"
     assert strip_name("turn it up", names, fuzzy=True) == "turn it up"
     assert strip_name("Tuff open Spotify", names) == "tuff open spotify"
+
+
+# -- voice tags ------------------------------------------------------------------
+
+
+def test_emotion_tag_carries_over_sentences():
+    from touff.audio.expressive import split_sentences
+
+    assert split_sentences("[angry] No! Absolutely not. I refuse.") == ["[angry] No! Absolutely not.", "[angry] I refuse."]
+    assert split_sentences("Hi there friend. [laugh] Gotcha.") == ["Hi there friend.", "[laugh] Gotcha."]
+
+
+def test_unknown_tags_are_dropped_and_display_is_clean():
+    from touff.audio.expressive import clean_tags
+    from touff.brain.text import strip_tags
+
+    assert clean_tags("[angry] hey [banana] you [laugh]") == "[angry] hey you [laugh]"
+    assert strip_tags("[sarcastic] Oh wow. [sigh] Fine.") == "Oh wow. Fine."

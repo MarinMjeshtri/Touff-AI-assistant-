@@ -175,9 +175,14 @@
       <button class="btn s" id="suggestWake">Suggest sound-alikes for this name</button>
     </div>
     <div class="card">
-      <b>Voice</b>
+      <b>Voice</b> <span class="muted" id="engineNow"></span>
       <div class="grid2">
-        <div><label class="f">Voice</label><select data-cfg="voice" id="voiceSel"></select></div>
+        <div><label class="f">Engine</label><select data-cfg="voice_engine">
+          <option value="auto">Auto (expressive if the GPU voice is installed)</option>
+          <option value="expressive">Expressive: laughs, shouts, cries (GPU)</option>
+          <option value="piper">Lightweight: calm, instant (CPU)</option></select></div>
+        <div><label class="f">Expressive voice clip (.wav, 10-20 s, optional)</label><input type="text" data-cfg="voice_clip" placeholder="C:\path	ooice.wav (blank = default voice)"></div>
+        <div><label class="f">Lightweight voice</label><select data-cfg="voice" id="voiceSel"></select></div>
         <div><label class="f">Microphone</label><select data-cfg="mic_device" id="micSel"></select></div>
         <div><label class="f">Speed <span id="spdV"></span></label><input type="range" min="0.7" max="1.5" step="0.05" data-cfg="speech_speed" data-num></div>
         <div><label class="f">Volume <span id="volV"></span></label><input type="range" min="0.3" max="2" step="0.05" data-cfg="volume" data-num></div>
@@ -288,6 +293,8 @@ function renderConfig() {
     if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
   });
   $("wakeWords").value = (c.wake_words || []).join(", ");
+  $("engineNow").textContent = S.ready ? `· speaking with the ${S.voice_engine_active === "expressive" ? "expressive GPU" : "lightweight"} voice` +
+    (!S.expressive_installed ? " (expressive voice not installed)" : "") : "";
   $("spdV").textContent = c.speech_speed + "×"; $("volV").textContent = Math.round(c.volume * 100) + "%"; $("feistyV").textContent = c.feisty_level;
   const w = S.wake;
   $("wakeInfo").innerHTML = w ? `Currently listening for: ${w.listening_for.map((x) => `<span class="chip acc">${esc(x)}</span>`).join("")}` +
@@ -309,7 +316,7 @@ document.querySelectorAll("[data-cfg]").forEach((el) => {
 });
 async function save(key, value) {
   S = await api().save_config({ [key]: value }); render();
-  if (key === "voice") toast("Loading new voice... (first time downloads it)");
+  if (["voice", "voice_engine", "voice_clip"].includes(key)) toast("Switching voice... she'll say something when ready");
   else if (key === "mic_device") toast("Mic change applies after restarting Touff");
   else toast("Saved ✓");
 }
@@ -319,7 +326,10 @@ $("suggestWake").onclick = async () => {
   if (!s.length) return toast("Couldn't find sound-alikes. Try spelling it like it sounds!");
   $("wakeWords").value = s.join(", "); $("wakeWords").onchange(); toast("Found: " + s.join(", "));
 };
-$("preview").onclick = () => api().preview_voice(`Hi, I'm ${S.config.name}. How do I sound?`);
+const PREVIEWS = ["[happy] Hi, I'm {n}! How do I sound?", "[angry] I am NOT playing Candy Shop!", "[crying] You're closing me already? [sniff]",
+  "[whispering] Psst. I can whisper too.", "[sarcastic] Oh wow, another Google search. [sigh] Thrilling.", "[dramatic] Booting up... the sack! [laugh]"];
+let prevIdx = 0;
+$("preview").onclick = () => api().preview_voice(PREVIEWS[prevIdx++ % PREVIEWS.length].replace("{n}", S.config.name));
 $("checkBrain").onclick = async () => { $("brainMsg").textContent = "asking Claude..."; $("brainMsg").textContent = await api().check_brain(); };
 
 // -- commands --

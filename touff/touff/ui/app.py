@@ -20,6 +20,8 @@ import webview
 from .. import autostart
 from ..actions.registry import ACTIONS
 from ..brain.claude_cli import BrainError
+from ..audio.expressive import available as expressive_available
+from ..brain.text import strip_tags
 from ..models import VOICES
 
 if TYPE_CHECKING:
@@ -30,10 +32,11 @@ WEB = Path(__file__).parent / "web"
 POPUP_W, POPUP_H = 380, 190
 
 GREETINGS = [
-    "{name} online. Missed me?",
-    "Hi! Just say {name} when you need me.",
-    "{name} is awake and slightly caffeinated.",
-    "Hello hello! {name}, reporting for duty.",
+    "[happy] {name} online. Missed me?",
+    "[happy] Hi! Just say {name} when you need me.",
+    "[dramatic] {name} is awake... and slightly caffeinated. [laugh]",
+    "[happy] Hello hello! {name}, reporting for duty.",
+    "[sigh] Ugh, fine, I'm up. What do you need?",
 ]
 
 
@@ -123,22 +126,25 @@ class Api:
             "mics": mics,
             "wake": wake,
             "brain_installed": a.brain.available,
+            "expressive_installed": expressive_available(),
+            "voice_engine_active": "expressive" if type(a.voice).__name__ == "ExpressiveVoice" else "piper",
             "ready": a.ready.is_set(),
         }
 
     def save_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         store = self._app.store
-        old_voice = store.config.get("voice")
+        voice_keys = ("voice", "voice_engine", "voice_clip")
+        old = {k: store.config.get(k) for k in voice_keys}
         store.update_config(changes)
         if "start_with_windows" in changes:
             autostart.set_enabled(bool(changes["start_with_windows"]))
-        if changes.get("voice") and changes["voice"] != old_voice and self._a.ready.is_set():
-            threading.Thread(target=self._swap_voice, args=(changes["voice"],), daemon=True).start()
+        if any(k in changes and changes[k] != old[k] for k in voice_keys) and self._a.ready.is_set():
+            threading.Thread(target=self._swap_voice, daemon=True).start()
         return self.get_all()
 
-    def _swap_voice(self, voice: str) -> None:
-        self._a.change_voice(voice)
-        self._a.speak(random.choice(["How do I sound?", "New voice, who dis?", "Testing, testing. Ooh, I like this."]))
+    def _swap_voice(self) -> None:
+        self._a.change_voice()
+        self._a.speak(random.choice(["[happy] How do I sound?", "New voice, who dis? [laugh]", "Testing, testing. [gasp] Ooh, I like this."]))
 
     def save_commands(self, commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
         self._app.store.set_commands(commands)
@@ -249,7 +255,7 @@ class DesktopApp:
         name = self.store.config["name"]
         greeting = random.choice(GREETINGS).format(name=name)
         self.ui.show("speaking")
-        self.ui.said(greeting)
+        self.ui.said(strip_tags(greeting))
         self.assistant.speak(greeting)
         self.ui.hide(1.5)
         self.assistant.run()
@@ -298,6 +304,8 @@ class DesktopApp:
             self.assistant.mic.stop()
         if self.tray:
             self.tray.stop()
+        if hasattr(self.assistant.voice, "close"):
+            self.assistant.voice.close()
         self.settings.events.closing -= self._keep_settings
         for win in list(webview.windows):
             win.destroy()
