@@ -309,8 +309,7 @@ function renderPack() {
   btn.innerHTML = p.installed ? icon("check") + "Installed" : busy ? icon("refresh", "spin") + "Installing..." : icon("plus") + (p.state === "error" ? "Try again" : "Install");
   btn.classList.toggle("p", !p.installed);
   logBox.hidden = !(busy || p.state === "error" || p.state === "done");
-  logBox.querySelector("pre").textContent = p.message || (p.log || []).join("
-");
+  logBox.querySelector("pre").textContent = p.message || (p.log || []).join(String.fromCharCode(10));
   logBox.querySelector("pre").className = p.state === "error" ? "bad" : "muted";
   clearTimeout(renderPack._t);
   if (busy) renderPack._t = setTimeout(async () => { S.voice_pack = await api().voice_pack_status(); renderPack(); if (S.voice_pack.state === "done") reload(); }, 1500);
