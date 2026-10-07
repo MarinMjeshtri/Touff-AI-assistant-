@@ -142,6 +142,10 @@ class Router:
             return Reply("", [{"type": "volume", "arg": arg}], source="intent")
         if k == "system":
             return self._guard(Reply(P.say("ok"), [{"type": arg, "arg": ""}], source="intent"))
+        if k == "youtube_latest":
+            return Reply(P.say("yt_latest", x=_pretty(arg)), [{"type": "youtube_play", "arg": f"latest:{arg}"}], source="intent")
+        if k == "youtube_play":
+            return Reply(P.say("yt_play", x=arg), [{"type": "youtube_play", "arg": arg}], source="intent")
         if k == "search":
             engine = intent.extra.get("engine", "google")
             action = {"google": "google_search", "youtube": "youtube_search", "spotify": "spotify_search"}[engine]
@@ -340,6 +344,7 @@ _VERBS: dict[str, str | Callable[[str], str]] = {
     "open_url": "open {}",
     "google_search": "google {}",
     "youtube_search": "search YouTube for {}",
+    "youtube_play": "play {} on YouTube",
     "spotify_search": "find {} on Spotify",
     "media": "hit {}",
     "volume": "turn the volume {}",

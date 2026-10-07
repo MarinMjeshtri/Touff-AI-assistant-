@@ -8,6 +8,8 @@ LINES = {
     "wake": ["Yes?", "Hm?", "[happy] I'm here!", "What's up?", "Yo.", "At your service.", "Talk to me."],
     "ok": ["[happy] On it!", "Done.", "You got it.", "Easy.", "Consider it done.", "[happy] Boom.", "Sure thing."],
     "opening": ["Opening {x}.", "Firing up {x}.", "{x}, coming right up.", "Here's {x}."],
+    "yt_latest": ["Pulling up {x}'s newest video.", "[happy] Fresh {x} upload, coming up!", "Let's see what {x} posted."],
+    "yt_play": ["Playing {x}.", "[happy] {x}, coming right up.", "Putting on {x}."],
     "searching": ["Searching for {x}.", "Let's see what the internet says about {x}.", "Looking up {x}."],
     "not_found": [
         "I couldn't find {x} on this computer.",

@@ -32,7 +32,16 @@ _SEARCH_ON = re.compile(
 _SEARCH = re.compile(
     r"^(?:search|google|look up|find)(?:\s+(?:on|in))?(?:\s+(?P<engine>google|youtube|spotify))?(?:\s+for)?\s+(?P<q>.+)$"
 )
-_PLAY_ON = re.compile(r"^play\s+(?P<q>.+?)\s+on\s+(?P<engine>youtube|spotify)$")
+_PLAY_ON = re.compile(r"^(?:play|watch|put on)\s+(?P<q>.+?)\s+on\s+(?P<engine>youtube|spotify)$")
+# "open the newest lazy mattman video", "play the latest video from mrbeast", "play markiplier's newest video"
+_VERB = r"(?:open|play|put on|show me|show|watch|pull up|bring up|start)"
+_NEW = r"(?:newest|latest|new|last|most recent|recent)"
+_VID = r"(?:video|vid|upload|episode)"
+_LATEST = [
+    re.compile(rf"^{_VERB}?\s*(?:me\s+)?(?:the\s+)?{_NEW}\s+{_VID}\s+(?:from|by|of)\s+(?P<ch>.+?)(?:\s+on youtube)?$"),
+    re.compile(rf"^{_VERB}\s+(?:me\s+)?(?:the\s+)?{_NEW}\s+(?P<ch>.+?)\s+{_VID}(?:\s+on youtube)?$"),
+    re.compile(rf"^{_VERB}\s+(?P<ch>.+?)(?:'s|s')\s+{_NEW}\s+{_VID}(?:\s+on youtube)?$"),
+]
 _MEDIA = {
     "play_pause": re.compile(r"^(?:play|pause|resume|unpause|stop the music|pause the music|play the music|pause it|play it|resume the music|hit play|hit pause)$"),
     "next": re.compile(r"^(?:next|skip|next song|next track|skip (?:this |the )?(?:song|track)|skip it)$"),
@@ -161,9 +170,14 @@ def parse(text: str) -> Intent | None:
     for what, pattern in _VOLUME.items():
         if pattern.match(t):
             return Intent("volume", what)
+    for pattern in _LATEST:
+        if m := pattern.match(t):
+            return Intent("youtube_latest", m.group("ch"))
     if window := _parse_window(t):
         return window
     if m := _PLAY_ON.match(t):
+        if m.group("engine") == "youtube":  # play it, don't just show a search page
+            return Intent("youtube_play", m.group("q"))
         return Intent("search", m.group("q"), {"engine": m.group("engine")})
     if m := _SEARCH_ON.match(t):
         return Intent("search", m.group("q"), {"engine": m.group("engine")})

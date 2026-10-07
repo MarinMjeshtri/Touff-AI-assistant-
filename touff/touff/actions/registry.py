@@ -34,7 +34,11 @@ ACTIONS: dict[str, ActionSpec] = {
     "open_steam_game": ActionSpec("Launch a Steam game (starts Steam if needed)", "Steam appid or game name"),
     "open_url": ActionSpec("Open a web address in the browser", "URL"),
     "google_search": ActionSpec("Search Google", "search query"),
-    "youtube_search": ActionSpec("Search YouTube", "search query"),
+    "youtube_search": ActionSpec("Show YouTube search results (only when the user wants to browse results)", "search query"),
+    "youtube_play": ActionSpec(
+        "Open and play one specific YouTube video directly: a channel's newest upload, or the top result for a search",
+        "latest:<channel name> | <search query>",
+    ),
     "spotify_search": ActionSpec("Open Spotify on a search for a song/artist/playlist", "search query"),
     "media": ActionSpec("Control whatever music/video is playing", "play_pause | next | previous | stop"),
     "volume": ActionSpec("Change the system volume", "up | down | mute"),
@@ -149,6 +153,18 @@ class Executor:
 
     def _do_google_search(self, query: str) -> str | None:
         webbrowser.open("https://www.google.com/search?q=" + quote_plus(query))
+        return None
+
+    def _do_youtube_play(self, arg: str) -> str | None:
+        from . import youtube
+
+        latest = arg.lower().startswith("latest:")
+        query = arg.split(":", 1)[1].strip() if latest else arg
+        try:
+            video = youtube.latest_video(query) if latest else youtube.top_video(query)
+        except Exception:  # offline, YouTube changed its page, unknown channel...
+            return self._do_youtube_search(query + (" newest video" if latest else ""))
+        webbrowser.open(video.url)
         return None
 
     def _do_youtube_search(self, query: str) -> str | None:
