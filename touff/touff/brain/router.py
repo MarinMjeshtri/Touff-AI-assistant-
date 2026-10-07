@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+from ..actions import windows
 from ..actions.registry import is_risky
 from . import glossary, intents, learning, matcher
 from . import personality as P
@@ -112,7 +113,7 @@ class Router:
             verb = parts[0].split()[0]
             replies = [self._local(p) or self._local(f"{verb} {p}") for p in parts]
             if all(r is not None and r.actions and not r.on_yes for r in replies):
-                actions = [a for r in replies for a in r.actions]
+                actions = _resolve_it([a for r in replies for a in r.actions])
                 return Reply(P.say("ok"), actions, source="intent")
         return None
 
@@ -150,7 +151,57 @@ class Router:
             return Reply(P.say("opening", x=_pretty(app.name)), [{"type": "open_app", "arg": app.name}], source="intent")
         if k == "learn":
             return self._learn(arg)
+        if k == "window":
+            return self._window_reply(arg, intent.extra.get("app", ""), intent.extra.get("monitor", ""))
+        if k == "open_on":
+            spoken = windows.clean_app_name(arg)
+            app = self.apps.find(spoken)
+            monitor = windows.monitor_word(intent.extra.get("monitor", ""))
+            if app is None or monitor is None:
+                return None
+            target = spoken if windows.is_known_alias(spoken) else app.name
+            return Reply(
+                P.say("open_on", x=_pretty(app.name), where=_where(monitor)),
+                [{"type": "open_app", "arg": app.name}, {"type": "window", "arg": f"move:{target}:{monitor}"}],
+                source="intent",
+            )
+        if k == "hotkey":
+            keys = re.sub(r"^(?:the|a)\s+", "", arg)
+            try:
+                windows.parse_hotkey(keys)
+            except PermissionError:
+                return Reply(P.say("blocked_key"), source="intent")
+            except ValueError:
+                return None  # "press play"... let the brain work it out
+            return Reply("", [{"type": "hotkey", "arg": keys}], source="intent")
         return None
+
+    def _window_reply(self, op: str, spoken: str, monitor_spoken: str) -> Reply | None:
+        if op == "minimize_all":
+            return Reply(P.say("desktop"), [{"type": "window", "arg": "minimize_all:"}], source="intent")
+        target, pretty = self._window_app(spoken, op)
+        if target is None:
+            return None  # not an app we know: the brain may still make sense of it
+        if op == "move":
+            monitor = windows.monitor_word(monitor_spoken)
+            if monitor is None:
+                return None
+            action = {"type": "window", "arg": f"move:{target}:{monitor}"}
+            return Reply(P.say("window_move", x=pretty, where=_where(monitor)), [action], source="intent")
+        line = {"snap_left": "window_snap", "snap_right": "window_snap"}.get(op, f"window_{op}")
+        return Reply(P.say(line, x=pretty, side=op[5:]), [{"type": "window", "arg": f"{op}:{target}"}], source="intent")
+
+    def _window_app(self, spoken: str, op: str) -> tuple[str | None, str]:
+        """Spoken app -> (name for the window action, name to say). Only apps we actually know."""
+        name = windows.clean_app_name(spoken)
+        if name == "active":
+            return "active", "that window"
+        app = self.apps.find(name) if name else None
+        if windows.is_known_alias(name):
+            return name, _pretty(app.name) if app else name.title()
+        if app is None or (op == "close" and app.kind == "url"):
+            return None, ""  # "close youtube" means a tab, not the whole browser
+        return app.name, _pretty(app.name)
 
     # -- learning ------------------------------------------------------------
 
@@ -243,7 +294,45 @@ def _pretty(name: str) -> str:
     return name if name[:1].isupper() else name.title()
 
 
-_VERBS = {
+def _where(monitor: str) -> str:
+    if monitor == "1":
+        return "your main monitor"
+    if monitor.isdigit():
+        return f"monitor {monitor}"
+    return {"left": "the left monitor", "right": "the right monitor"}.get(monitor, "the other monitor")
+
+
+def _window_phrase(arg: str) -> str:
+    try:
+        op, app, monitor = windows.parse_window_arg(arg)
+    except ValueError:
+        return f"manage a window ({arg})"
+    if op == "minimize_all":
+        return "show the desktop"
+    app = "the window in front" if app == "active" else app
+    if op == "move":
+        return f"move {app} to {_where(monitor)}"
+    if op.startswith("snap_"):
+        return f"snap {app} to the {op[5:]}"
+    return f"{op} {app}"
+
+
+def _resolve_it(actions: list[dict[str, str]]) -> list[dict[str, str]]:
+    """'open chrome and move it to my second monitor': 'it' is the app just opened, not the front window."""
+    opened, out = None, []
+    for a in actions:
+        if a["type"] == "open_app":
+            opened = a["arg"]
+        elif a["type"] == "window" and opened:
+            op, _, rest = a["arg"].partition(":")
+            app, sep, monitor = rest.partition(":")
+            if app == "active":
+                a = {"type": "window", "arg": f"{op}:{opened}{sep}{monitor}"}
+        out.append(a)
+    return out
+
+
+_VERBS: dict[str, str | Callable[[str], str]] = {
     "open_app": "open {}",
     "open_steam_game": "launch {}",
     "open_url": "open {}",
@@ -254,6 +343,8 @@ _VERBS = {
     "volume": "turn the volume {}",
     "timer": "start a {} second timer",
     "run_command": "run {}",
+    "window": _window_phrase,
+    "hotkey": "press {}",
     "lock_pc": "lock the computer",
     "sleep_pc": "put the computer to sleep",
     "shutdown_pc": "shut the computer down",
@@ -263,6 +354,6 @@ _VERBS = {
 def _describe(actions: list[dict[str, str]]) -> str:
     bits = []
     for a in actions:
-        arg = a["arg"].replace("_", " ")
-        bits.append(_VERBS.get(a["type"], a["type"]).format(arg))
+        verb = _VERBS.get(a["type"], a["type"])
+        bits.append(verb(a["arg"]) if callable(verb) else verb.format(a["arg"].replace("_", " ")))
     return " and then ".join(bits)

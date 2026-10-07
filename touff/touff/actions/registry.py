@@ -9,11 +9,13 @@ import ctypes
 import os
 import subprocess
 import threading
+import time
 import webbrowser
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 from urllib.parse import quote_plus
 
+from . import windows
 from .apps import AppIndex
 
 if TYPE_CHECKING:
@@ -36,6 +38,19 @@ ACTIONS: dict[str, ActionSpec] = {
     "spotify_search": ActionSpec("Open Spotify on a search for a song/artist/playlist", "search query"),
     "media": ActionSpec("Control whatever music/video is playing", "play_pause | next | previous | stop"),
     "volume": ActionSpec("Change the system volume", "up | down | mute"),
+    "window": ActionSpec(
+        "Manage an app's window. Operations: focus (bring to front; opens the app if it isn't running), maximize, "
+        "minimize, restore, close (politely, the app may ask to save), move (to another monitor), snap_left / snap_right "
+        "(left/right half of its monitor), minimize_all (show the desktop, no app needed). Monitors: 1 = primary, "
+        "others numbered left to right; also next/other, previous, left, right. App 'active' = the frontmost window. "
+        "Works right after open_app in the same reply (waits for the window to appear)",
+        "operation:app[:monitor], e.g. move:chrome:2 | move:discord:next | maximize:spotify | focus:vs code | "
+        "snap_left:chrome | close:notepad | minimize:active | minimize_all:",
+    ),
+    "hotkey": ActionSpec(
+        "Press a keyboard shortcut in whatever window is in front (win+r and win+x are blocked)",
+        "keys joined with +, e.g. ctrl+t | ctrl+shift+esc | win+shift+s | alt+tab | alt+f4 | f5 | space",
+    ),
     "timer": ActionSpec("Start a countdown; Touff announces when it's done", "number of seconds"),
     "run_command": ActionSpec("Run one of the user's custom commands", "custom command name"),
     "lock_pc": ActionSpec("Lock the computer", "(empty)", risky=True),
@@ -79,11 +94,14 @@ class Executor:
         self.store = store
         self.announce = announce  # speak something later (timers)
         self.timers: list[threading.Timer] = []
+        self._opened: tuple[float, set[int]] | None = None  # when the last app was launched, and the windows before it
 
     def run(self, actions: list[dict[str, str]], depth: int = 0) -> list[str]:
         """Run actions in order. Returns problems worth telling the user about."""
         problems = []
         for action in valid(actions):
+            if action["type"] in ("open_app", "open_steam_game"):
+                self._opened = (time.monotonic(), windows.snapshot())  # so a following "window" can find the new one
             handler = getattr(self, f"_do_{action['type']}")
             try:
                 problem = handler(action["arg"].strip(), depth) if action["type"] == "run_command" else handler(action["arg"].strip())
@@ -176,6 +194,34 @@ class Executor:
                 problems = self.run(cmd["actions"], depth + 1)
                 return "; ".join(problems) or None
         return f"there's no custom command called {name}"
+
+    def _do_window(self, arg: str) -> str | None:
+        try:
+            op, app, monitor = windows.parse_window_arg(arg)
+        except ValueError as err:
+            return str(err)
+        if op == "minimize_all":
+            windows.minimize_all()
+            return None
+        opened = self._opened
+        if opened and time.monotonic() - opened[0] < 20 and app != "active":
+            win = windows.wait_for_window(app, opened[1])  # the app may still be starting
+            self._opened = None if win else opened  # found it: later actions needn't wait
+        else:
+            win = windows.find_window(app)
+        if win is None:
+            if op in ("focus", "restore"):  # "switch to spotify" when it isn't running: open it
+                return self._do_open_app(app)
+            return f"I can't see a {app} window"
+        return windows.apply(op, win, monitor)
+
+    def _do_hotkey(self, combo: str) -> str | None:
+        try:
+            mods, key = windows.parse_hotkey(combo)
+        except (ValueError, PermissionError) as err:
+            return str(err)
+        windows.press_keys(mods, key)
+        return None
 
     def _do_lock_pc(self, _: str) -> str | None:
         ctypes.windll.user32.LockWorkStation()

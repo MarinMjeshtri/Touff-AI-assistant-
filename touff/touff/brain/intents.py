@@ -43,6 +43,45 @@ _VOLUME = {
     "down": re.compile(r"^(?:volume down|quieter|softer|turn (?:it|the volume|the music) down|turn down the (?:volume|music))$"),
     "mute": re.compile(r"^(?:mute|unmute|mute (?:it|the sound|the volume)|unmute (?:it|the sound))$"),
 }
+# -- windows -------------------------------------------------------------------------
+_MON_WORDS = r"first|1st|one|second|2nd|two|third|3rd|three|fourth|4th|four|other|next|another|previous|left|right|main|primary|[1-9]"
+_SCREEN = r"(?:monitor|screen|display)"
+
+
+def _where(group: str) -> str:
+    """'the second monitor' / 'my other screen' / 'monitor 2'."""
+    return (
+        rf"(?:the\s+|my\s+)?(?:(?P<{group}>{_MON_WORDS})\s+{_SCREEN}"
+        rf"|{_SCREEN}\s+(?:number\s+)?(?P<{group}2>{_MON_WORDS}))"
+    )
+
+
+_WIN_MOVE = re.compile(
+    rf"^(?:move|put|send|throw|drag|shift|take|bring)\s+(?P<app>.+?)\s+(?:over\s+)?(?:to|onto|on|into)\s+{_where('mon')}$"
+)
+_OPEN_ON = re.compile(
+    r"^(?:open|launch|start|run|boot up|boot|fire up|load up|load|pull up|bring up)\s+(?:up\s+)?(?P<app>.+?)\s+"
+    rf"(?:on|in|to|onto)\s+{_where('mon')}$"
+)
+_MINIMIZE_ALL = re.compile(
+    r"^(?:minimi[sz]e|hide)\s+(?:everything|all(?:\s+(?:the\s+|my\s+)?windows)?|all\s+my\s+windows)$"
+    r"|^(?:show|go to|take me to)\s+(?:me\s+)?(?:the\s+|my\s+)?desktop$"
+)
+_SNAP = re.compile(
+    r"^snap\s+(?P<app>.+?)\s+(?:to\s+)?(?:the\s+)?(?P<side>left|right)(?:\s+(?:side|half))?$"
+    r"|^(?:move|put|push)\s+(?P<app2>.+?)\s+to\s+(?:the\s+)?(?P<side2>left|right)\s+(?:side|half)(?:\s+of\s+the\s+screen)?$"
+)
+_WINDOW = {
+    "maximize": re.compile(
+        r"^(?:maximi[sz]e|full ?screen|expand)\s+(?P<app>.+)$|^make\s+(?P<app2>.+?)\s+(?:full ?screen|maximi[sz]ed|big|bigger)$"
+    ),
+    "minimize": re.compile(r"^(?:minimi[sz]e|hide)\s+(?P<app>.+)$"),
+    "restore": re.compile(r"^(?:restore|unminimi[sz]e|unmaximi[sz]e)\s+(?P<app>.+)$"),
+    "close": re.compile(r"^(?:close|quit|exit)\s+(?:out of\s+)?(?P<app>.+)$"),
+    "focus": re.compile(r"^(?:switch to|switch over to|go to|go back to|focus on|focus|show me|jump to|take me to)\s+(?P<app>.+)$"),
+}
+_PRESS = re.compile(r"^(?:press|hit|push)\s+(?:the\s+)?(?P<keys>.+?)(?:\s+(?:key|keys|shortcut))?$")
+
 _TIME = re.compile(r"^(?:what time is it|what's the time|whats the time|what is the time|time|tell me the time)$")
 _DATE = re.compile(r"^(?:what(?:'s| is) the date|what day is it|what's today|what is today|today's date|whats the date)$")
 _TIMER = re.compile(
@@ -113,6 +152,8 @@ def parse(text: str) -> Intent | None:
     for what, pattern in _VOLUME.items():
         if pattern.match(t):
             return Intent("volume", what)
+    if window := _parse_window(t):
+        return window
     if m := _PLAY_ON.match(t):
         return Intent("search", m.group("q"), {"engine": m.group("engine")})
     if m := _SEARCH_ON.match(t):
@@ -121,4 +162,25 @@ def parse(text: str) -> Intent | None:
         return Intent("search", m.group("q"), {"engine": m.group("engine") or "google"})
     if m := _OPEN.match(t):
         return Intent("open", m.group("target"))
+    return None
+
+
+def _pick(m: re.Match, name: str) -> str:
+    return m.group(name) or m.group(name + "2") or ""
+
+
+def _parse_window(t: str) -> Intent | None:
+    if _MINIMIZE_ALL.match(t):
+        return Intent("window", "minimize_all")
+    if m := _OPEN_ON.match(t):
+        return Intent("open_on", m.group("app"), {"monitor": _pick(m, "mon")})
+    if m := _WIN_MOVE.match(t):
+        return Intent("window", "move", {"app": m.group("app"), "monitor": _pick(m, "mon")})
+    if m := _SNAP.match(t):
+        return Intent("window", f"snap_{_pick(m, 'side')}", {"app": _pick(m, "app")})
+    for op, pattern in _WINDOW.items():
+        if m := pattern.match(t):
+            return Intent("window", op, {"app": _pick(m, "app") if op == "maximize" else m.group("app")})
+    if m := _PRESS.match(t):
+        return Intent("hotkey", m.group("keys"))
     return None
