@@ -22,6 +22,7 @@ import logging.handlers
 import os
 import sys
 import threading
+import time
 
 
 def _setup_logging(debug: bool) -> None:
@@ -62,10 +63,18 @@ def _already_running(show: bool) -> bool:
         return False
     if not show:
         log.info("Touff is already running; nothing to do")
-    elif instance.notify_show(data_dir()):
+        return True
+    if instance.notify_show(data_dir()):
         log.info("Touff is already running: showed her settings instead of starting a second copy")
-    else:
-        log.warning("Touff is already running but didn't answer; not starting a second copy")
+        return True
+    # No answer: usually the old copy is still shutting down (quit, then reopened right away).
+    # Wait for it to let go of the lock, then start normally.
+    for _ in range(30):
+        time.sleep(0.5)
+        if instance.acquire(data_dir()):
+            log.info("previous Touff finished closing; starting")
+            return False
+    log.warning("Touff is already running but didn't answer; not starting a second copy")
     return True
 
 
