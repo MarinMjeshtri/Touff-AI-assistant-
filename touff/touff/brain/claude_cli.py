@@ -1,17 +1,21 @@
 """The fallback "big brain": Claude, called through the user's own Claude Code login.
 
-No API key and no per-token bill: `claude -p` runs one headless turn on the user's
-subscription. All of Claude Code's tools are disabled, so Claude can't touch the PC
-itself. It can only *suggest* actions from our whitelist, which the app then runs.
+No API key and no per-token bill: `claude -p` runs headless on the user's subscription.
+One session stays running (stream-json) so each question skips the ~3 s startup.
+All of Claude Code's tools are disabled, so Claude can't touch the PC itself. It can
+only *suggest* actions from our whitelist, which the app then runs.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
+import queue
 import re
 import shutil
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +26,10 @@ from ..actions.registry import ACTIONS, valid
 if TYPE_CHECKING:
     from ..actions.apps import AppIndex
     from ..store import Store
+
+log = logging.getLogger(__name__)
+MAX_SESSION_TURNS = 30
+SESSION_IDLE_S = 20 * 60
 
 
 class BrainError(Exception):
@@ -86,6 +94,8 @@ class ClaudeBrain:
         self.store = store
         self.apps = apps
         self.exe = find_claude()
+        self._session: _Session | None = None
+        self._lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -159,9 +169,12 @@ class ClaudeBrain:
     def ask(self, heard: str, conversation: list[tuple[str, str]], interpreted: str = "", planned: list[dict] | None = None) -> BrainReply:
         if not self.exe:
             raise BrainError("not_installed")
+        system = self.system_prompt()
+        session = self._session_for(system)
 
         parts = [time.strftime("Current time: %A %d %B %Y, %H:%M.")]
-        if conversation:
+        # A warm session remembers the chat by itself; a fresh one gets a recap.
+        if conversation and (session is None or session.turns == 0):
             parts.append("Recent conversation:")
             parts += [f"{who}: {text}" for who, text in conversation[-8:]]
         parts.append(f'The user just said (speech transcript): "{heard}"')
@@ -175,30 +188,75 @@ class ClaudeBrain:
             )
         user_prompt = "\n".join(parts)
 
-        prompt_file = self.store.root / "brain_prompt.txt"
-        prompt_file.write_text(self.system_prompt(), encoding="utf-8")
+        if session is not None:
+            try:
+                return session.ask(user_prompt)
+            except BrainError as err:
+                if err.reason == "not_logged_in":
+                    raise
+                log.warning("brain session failed (%s), retrying one-shot", err)
+                self.close()
+        return self._one_shot(system, user_prompt)
+
+    def warm(self) -> None:
+        """Start the session ahead of time so the first question doesn't pay the startup cost."""
+        if self.exe and self.store.config.get("brain") == "claude":
+            self._session_for(self.system_prompt())
+
+    def close(self) -> None:
+        with self._lock:
+            if self._session is not None:
+                self._session.close()
+                self._session = None
+
+    def _session_for(self, system: str) -> "_Session | None":
+        """The running session, restarted when the instructions changed (new commands,
+        memories, feisty mode...), it went idle, or the conversation got long."""
+        key = (system, self.store.config.get("claude_model", "haiku"))
+        with self._lock:
+            s = self._session
+            if s is not None and (s.key != key or not s.alive or s.turns >= MAX_SESSION_TURNS or s.idle_for() > SESSION_IDLE_S):
+                s.close()
+                s = self._session = None
+            if s is None:
+                try:
+                    s = self._session = _Session(self._cmd(system, streaming=True), self.store.root, key)
+                except OSError:
+                    log.exception("couldn't start a brain session")
+                    return None
+            return s
+
+    def _cmd(self, system: str, streaming: bool) -> list[str]:
+        prompt_file = self.store.root / ("brain_prompt_session.txt" if streaming else "brain_prompt.txt")
+        prompt_file.write_text(system, encoding="utf-8")
         cmd = [
             self.exe, "-p",
             "--model", self.store.config.get("claude_model", "haiku"),
             "--tools", "",
             "--strict-mcp-config",
             "--setting-sources", "",
+            "--settings", json.dumps({"alwaysThinkingEnabled": False}),  # voice replies don't need deep thought
             "--no-session-persistence",
-            "--output-format", "json",
             "--system-prompt-file", str(prompt_file),
             "--json-schema", json.dumps(SCHEMA),
         ]
-        env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDECODE") and k != "CLAUDE_CODE_ENTRYPOINT"}
+        if streaming:
+            cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        else:
+            cmd += ["--output-format", "json"]
+        return cmd
+
+    def _one_shot(self, system: str, user_prompt: str) -> BrainReply:
         try:
             proc = subprocess.run(
-                cmd,
+                self._cmd(system, streaming=False),
                 input=user_prompt,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 timeout=60,
                 cwd=str(self.store.root),
-                env=env,
+                env=_env(),
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.TimeoutExpired as exc:
@@ -206,6 +264,69 @@ class ClaudeBrain:
         except OSError as exc:
             raise BrainError("not_installed", str(exc)) from exc
         return parse_output(proc.stdout, proc.stderr)
+
+
+def _env() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDECODE") and k != "CLAUDE_CODE_ENTRYPOINT"}
+
+
+class _Session:
+    """One long-running `claude -p` in stream-json mode: pays the ~3 s startup once
+    and remembers the conversation on its own."""
+
+    def __init__(self, cmd: list[str], cwd: Path, key: tuple):
+        self.key = key
+        self.turns = 0
+        self.last_used = time.time()
+        self._results: queue.Queue = queue.Queue()
+        self._lock = threading.Lock()
+        self.proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            encoding="utf-8", cwd=str(cwd), env=_env(), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        for line in self.proc.stdout:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "result":
+                self._results.put(event)
+        self._results.put(None)  # process ended
+
+    @property
+    def alive(self) -> bool:
+        return self.proc.poll() is None
+
+    def idle_for(self) -> float:
+        return time.time() - self.last_used
+
+    def ask(self, text: str, timeout: float = 45) -> BrainReply:
+        with self._lock:
+            try:
+                self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
+                self.proc.stdin.flush()
+            except OSError as exc:
+                raise BrainError("failed", f"session pipe broke: {exc}") from exc
+            try:
+                event = self._results.get(timeout=timeout)
+            except queue.Empty as exc:
+                self.close()
+                raise BrainError("timeout") from exc
+            if event is None:
+                raise BrainError("failed", "session ended")
+            self.turns += 1
+            self.last_used = time.time()
+            return parse_output(json.dumps(event))
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+            self.proc.wait(timeout=3)
+        except Exception:
+            self.proc.kill()
 
 
 def parse_output(stdout: str, stderr: str = "") -> BrainReply:

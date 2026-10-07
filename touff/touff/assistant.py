@@ -103,6 +103,7 @@ class Assistant:
         cfg = self.store.config
         self.ui.status("Waking up my ears...")
         self.wake = WakeWord(models.vosk_path(), self._wake_words())
+        threading.Thread(target=self.brain.warm, daemon=True).start()
         self.start_engines()
         self.mic = Mic(cfg.get("mic_device"))
         self.mic.start()
@@ -159,6 +160,9 @@ class Assistant:
         return [cfg["name"].lower()] + [w.lower() for w in cfg.get("wake_words", [])]
 
     def _on_store_change(self, what: str) -> None:
+        if what in ("config", "commands", "memories"):
+            # Her instructions changed: restart the brain session now, not mid-question.
+            threading.Thread(target=self.brain.warm, daemon=True).start()
         if what != "config" or not self.ready.is_set():
             return
         cfg = self.store.config
