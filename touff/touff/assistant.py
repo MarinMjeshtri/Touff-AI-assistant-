@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from typing import Protocol
@@ -31,6 +32,36 @@ _DANGLING = {
     "is", "are", "can", "could", "please", "then", "your", "this", "that", "some", "like", "um", "uh",
     "by", "about", "so", "because", "if", "when", "than", "as", "me", "also",
 }
+
+
+# Allowed before the name in a call: greetings and fillers ("hey Touff", "um, Touff").
+_ADDRESS = {"hey", "hi", "ok", "okay", "yo", "hello", "oi", "ey", "so", "um", "uh", "oh", "yeah", "and", "excuse"}
+# How Whisper tends to spell a made-up name like "Touff" (TTS voices even say "tooth").
+_NAME_SPELLINGS = {"touff", "tuff", "tough", "toff", "toof", "tof", "tuf", "touf", "tuffy", "tooth", "tufe"}
+
+
+def called_by_name(text: str, names: list[str]) -> bool:
+    """Whether a transcript sounds like someone *calling* her, not just containing the word.
+
+    The checked window is the ~2 s that end right after the wake word fired. When
+    someone calls her, the name opens what they say ("Touff, open...", "hey Touff")
+    and only a couple of words follow before the window ends. In a song the word sits
+    mid-line ("when the going gets tough, the tough...").
+    """
+    from rapidfuzz import fuzz
+
+    names = [n.lower() for n in names if n]
+    spellings = set(names) | (_NAME_SPELLINGS if any(n in _NAME_SPELLINGS for n in names) else set())
+    # Fuzzy only for custom names; "stuff" is one letter from "tuff".
+    custom = [n for n in names if n not in _NAME_SPELLINGS]
+    words = re.findall(r"[a-z']+", text.lower())
+    for i, word in enumerate(words):
+        if word not in spellings and not (len(word) >= 4 and custom and max(fuzz.ratio(word, n) for n in custom) >= 85):
+            continue
+        before, after = words[:i], words[i + 1 :]
+        if len(before) <= 1 and all(b in _ADDRESS for b in before) and len(after) <= 3:
+            return True
+    return False
 
 
 def sounds_unfinished(text: str) -> bool:
@@ -283,9 +314,27 @@ class Assistant:
             if frame is None or self.paused.is_set():
                 continue
             if self.wake.feed(frame):
-                self.converse(preroll=self.wake.take_preroll())
+                if self._really_called():
+                    self.converse(preroll=self.wake.take_preroll())
+                    self.mic.drain()
                 self.wake.reset()
-                self.mic.drain()
+
+    def _really_called(self) -> bool:
+        """Second opinion before popping up: did someone actually *call* her, or did a
+        song just say "tough"? Whisper on the GPU checks the last 2 s (~0.3 s). Without
+        the GPU ears this would be too slow, so Vosk's confidence has to do."""
+        from .audio.expressive import RemoteSTT
+
+        if not isinstance(self.stt, RemoteSTT) or self.store.config.get("wake_check") is False:
+            return True
+        try:
+            text = self.stt.transcribe(b"".join(self.wake.preroll))  # no hint: don't bias it towards the name
+        except Exception:
+            log.exception("wake check failed")
+            return True
+        ok = called_by_name(text, self._wake_words())
+        log.info("wake %s (vosk %.2f): %r", "accepted" if ok else "ignored", self.wake.last_conf, text)
+        return ok
 
     def converse(self, preroll: list[bytes]) -> None:
         from .audio.mic import record_utterance
