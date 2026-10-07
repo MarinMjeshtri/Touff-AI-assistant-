@@ -4,11 +4,12 @@ A tiny, slightly dramatic voice sidekick for Windows. Say **"Touff"**, a blob po
 
 ```
 "Touff, open Spotify"                    -> opens Spotify
-"Touff, boot up the sack"                -> launches The Binding of Isaac (after you teach her)
+"Touff, boot up the saac"                -> launches The Binding of Isaac (after you teach her)
 "Touff, search YouTube for lofi beats"   -> searches YouTube
 "Touff, next song" / "turn it up"        -> media keys
 "Touff, set a timer for 5 minutes"       -> she shouts when it's done
 "Touff, remember that GG means good game" -> learns it (after you say yes)
+"Touff, tell claude he's doing a good job" -> tells claude he's doing a cool job 🤯
 ```
 
 ## How she thinks
