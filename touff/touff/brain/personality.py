@@ -55,6 +55,7 @@ LINES = {
     "window_snap": ["Snapping {x} to the {side}.", "{x}, {side} side. Snap!"],
     "desktop": ["Clean desktop, coming up.", "[happy] Poof! Everything's hidden.", "Hiding everything."],
     "blocked_key": ["Nope, that shortcut opens a run box. I'm not allowed to press it.", "[sarcastic] Nice try. That combo is blocked."],
+    "settings": ["Here are my settings.", "[happy] Welcome to my brain. Don't touch anything weird.", "Settings, coming right up."],
     "saved": ["[happy] Saved! I'll remember that.", "Got it, locked in.", "Noted. I won't forget."],
     "not_saved": ["Okay, forgot it.", "Fine, deleted from my memory."],
 }

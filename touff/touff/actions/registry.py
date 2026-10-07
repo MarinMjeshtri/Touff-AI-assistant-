@@ -53,6 +53,7 @@ ACTIONS: dict[str, ActionSpec] = {
     ),
     "timer": ActionSpec("Start a countdown; Touff announces when it's done", "number of seconds"),
     "run_command": ActionSpec("Run one of the user's custom commands", "custom command name"),
+    "open_settings": ActionSpec("Open Touff's own settings window (not the Windows Settings app)", "(empty)"),
     "lock_pc": ActionSpec("Lock the computer", "(empty)", risky=True),
     "sleep_pc": ActionSpec("Put the computer to sleep", "(empty)", risky=True),
     "shutdown_pc": ActionSpec("Shut the computer down (30 second grace period)", "(empty)", risky=True),
@@ -95,6 +96,7 @@ class Executor:
         self.announce = announce  # speak something later (timers)
         self.timers: list[threading.Timer] = []
         self._opened: tuple[float, set[int]] | None = None  # when the last app was launched, and the windows before it
+        self.on_open_settings: Callable[[], None] | None = None  # set by the desktop app (no window in --console/--text)
 
     def run(self, actions: list[dict[str, str]], depth: int = 0) -> list[str]:
         """Run actions in order. Returns problems worth telling the user about."""
@@ -221,6 +223,12 @@ class Executor:
         except (ValueError, PermissionError) as err:
             return str(err)
         windows.press_keys(mods, key)
+        return None
+
+    def _do_open_settings(self, _: str) -> str | None:
+        if self.on_open_settings is None:
+            return "my settings window isn't open in this mode"
+        self.on_open_settings()
         return None
 
     def _do_lock_pc(self, _: str) -> str | None:

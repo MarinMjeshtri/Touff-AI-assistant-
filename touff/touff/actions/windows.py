@@ -136,6 +136,23 @@ def half_rect(work: Rect, side: str) -> Rect:
     return (work[0], work[1], mid, work[3]) if side == "left" else (mid, work[1], work[2], work[3])
 
 
+def center_rect(size: tuple[int, int], work: Rect) -> Rect:
+    """A window of `size` centered in a work area, shrunk to fit if it's bigger than it."""
+    w = min(size[0], work[2] - work[0])
+    h = min(size[1], work[3] - work[1])
+    x = work[0] + (work[2] - work[0] - w) // 2
+    y = work[1] + (work[3] - work[1] - h) // 2
+    return x, y, x + w, y + h
+
+
+def monitor_at(point: tuple[int, int], monitors: list["Monitor"]) -> "Monitor | None":
+    """The monitor containing a point, else the primary one."""
+    for m in monitors:
+        if m.rect[0] <= point[0] < m.rect[2] and m.rect[1] <= point[1] < m.rect[3]:
+            return m
+    return next((m for m in monitors if m.primary), monitors[0] if monitors else None)
+
+
 def parse_window_arg(arg: str) -> tuple[str, str, str]:
     """'move:chrome:2' -> ('move', 'chrome', '2'). App names may contain colons
     ('The Binding of Isaac: Rebirth'), so the monitor is only split off when it looks like one."""
@@ -489,6 +506,56 @@ def focus(hwnd: int) -> bool:
         if attached:
             _user32.AttachThreadInput(me, fg_thread, False)
     return _user32.GetForegroundWindow() == hwnd
+
+
+def find_own_window(title: str) -> int:
+    """This process's top-level window with that exact title, hidden ones included
+    (FindWindowW could pick another Touff's window)."""
+    me, found = os.getpid(), []
+
+    def visit(hwnd, _):
+        pid = wt.DWORD()
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == me:
+            length = _user32.GetWindowTextLengthW(hwnd)
+            buf = ctypes.create_unicode_buffer(length + 1)
+            _user32.GetWindowTextW(hwnd, buf, length + 1)
+            if buf.value == title:
+                found.append(int(hwnd))
+                return False
+        return True
+
+    _user32.EnumWindows(_WNDENUMPROC(visit), 0)
+    return found[0] if found else 0
+
+
+def is_visible(hwnd: int) -> bool:
+    return bool(_user32.IsWindowVisible(hwnd)) and not _user32.IsIconic(hwnd)
+
+
+def center_under_cursor(hwnd: int, unless_already_there: bool = False) -> None:
+    """Center a window on the monitor the mouse is on (inside its work area, so not under the
+    taskbar). With unless_already_there, a window already on that monitor stays where it is."""
+    with _dpi_aware():
+        monitors = list_monitors()
+        pt = wt.POINT()
+        _user32.GetCursorPos(ctypes.byref(pt))
+        mon = monitor_at((pt.x, pt.y), monitors)
+        if mon is None:
+            return
+        if unless_already_there and _show_state(hwnd) != _SW_SHOWMINIMIZED:
+            r = _window_rect(hwnd)
+            cx, cy = (r[0] + r[2]) // 2, (r[1] + r[3]) // 2
+            if mon.rect[0] <= cx < mon.rect[2] and mon.rect[1] <= cy < mon.rect[3]:
+                return
+        if _show_state(hwnd) in (_SW_SHOWMAXIMIZED, _SW_SHOWMINIMIZED):
+            _user32.ShowWindow(hwnd, _SW_RESTORE)
+        for _ in range(2):  # again after a DPI change: the app rescales itself on the new monitor
+            r = _window_rect(hwnd)
+            target = center_rect((r[2] - r[0], r[3] - r[1]), mon.work)
+            if target == r:
+                break
+            _set_rect(hwnd, target)
 
 
 def move_to_monitor(hwnd: int, target: str) -> str | None:

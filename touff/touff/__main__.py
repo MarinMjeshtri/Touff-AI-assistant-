@@ -1,11 +1,15 @@
 """Run Touff.
 
-    python -m touff                 tray + pop-up + voice (the real thing)
-    python -m touff --settings      same, and open the settings window
+    python -m touff                 tray + pop-up + voice, opens the settings window (the real thing)
+    python -m touff --background    same, but stays in the tray (how Windows starts her at login)
+    python -m touff --settings      open the settings window (already the default without --background)
     python -m touff --console       voice only, logs to the terminal
     python -m touff --text "..."    one request typed instead of spoken
     python -m touff --download      fetch the speech models and exit
     python -m touff --install-voice-pack   build the expressive GPU voice (NVIDIA, ~10 GB)
+
+Only one windowed Touff runs at a time (per data folder): launching her again just brings
+up the running one's settings window, see instance.py.
 
 Logs also go to %APPDATA%\\Touff\\touff.log.
 """
@@ -44,6 +48,38 @@ def _setup_logging(debug: bool) -> None:
     threading.excepthook = lambda a: log.error("Thread %s crashed", a.thread and a.thread.name, exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
 
 
+def _already_running(show: bool) -> bool:
+    """If another Touff (same data folder) is running, ask it to show settings and say so."""
+    from . import instance
+    from .store import data_dir
+
+    log = logging.getLogger("touff")
+    try:
+        if instance.acquire(data_dir()):
+            return False
+    except Exception:
+        log.exception("single-instance check failed; starting anyway")
+        return False
+    if not show:
+        log.info("Touff is already running; nothing to do")
+    elif instance.notify_show(data_dir()):
+        log.info("Touff is already running: showed her settings instead of starting a second copy")
+    else:
+        log.warning("Touff is already running but didn't answer; not starting a second copy")
+    return True
+
+
+def _listen_for_second_launches(app):
+    from . import instance
+    from .store import data_dir
+
+    try:
+        return instance.Server(data_dir(), app.open_settings)
+    except Exception:
+        logging.getLogger("touff").exception("couldn't listen for second launches")
+        return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="touff", description="Tiny desktop voice sidekick.")
     parser.add_argument("--text", help="handle one typed request and exit")
@@ -52,11 +88,17 @@ def main() -> None:
     parser.add_argument("--console", action="store_true", help="no windows, just the voice loop")
     parser.add_argument("--download", action="store_true", help="download speech models and exit")
     parser.add_argument("--install-voice-pack", action="store_true", help="install the expressive GPU voice and exit")
-    parser.add_argument("--settings", action="store_true", help="open the settings window on start")
+    parser.add_argument("--settings", action="store_true", help="open the settings window on start (the default)")
+    parser.add_argument("--background", action="store_true", help="start in the tray without opening any window")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     _setup_logging(args.debug)
+
+    windowed = not (args.install_voice_pack or args.download or args.text or args.console)
+    show_settings = args.settings or not args.background
+    if windowed and _already_running(show=show_settings):
+        return
 
     if args.install_voice_pack:
         from . import voicepack
@@ -111,7 +153,14 @@ def main() -> None:
 
     if store.config["start_with_windows"] != autostart.is_enabled():  # the installer may have set it
         store.update_config({"start_with_windows": autostart.is_enabled()})
-    DesktopApp(assistant).run()
+    autostart.upgrade()  # older Run entries lack --background and would pop the window up at login
+    app = DesktopApp(assistant, show_settings=show_settings)
+    server = _listen_for_second_launches(app)
+    try:
+        app.run()
+    finally:
+        if server is not None:
+            server.close()
     sys.exit(0)
 
 

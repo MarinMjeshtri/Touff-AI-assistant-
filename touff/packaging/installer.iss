@@ -56,7 +56,8 @@ Name: "{autodesktop}\Touff"; Filename: "{app}\Touff.exe"; Tasks: desktopicon
 
 [Registry]
 ; Same value touff\autostart.py writes, so the Settings toggle and this box agree.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Touff"; ValueData: """{app}\Touff.exe"""; Tasks: autostart
+; --background: at login she goes straight to the tray (launching Touff.exe by hand opens settings).
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Touff"; ValueData: """{app}\Touff.exe"" --background"; Tasks: autostart
 
 [Run]
 Filename: "{app}\Touff.exe"; Description: "{cm:LaunchProgram,Touff}"; Flags: nowait postinstall skipifsilent

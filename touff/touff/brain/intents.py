@@ -82,6 +82,13 @@ _WINDOW = {
 }
 _PRESS = re.compile(r"^(?:press|hit|push)\s+(?:the\s+)?(?P<keys>.+?)(?:\s+(?:key|keys|shortcut))?$")
 
+# Touff's own settings. Comes before "open <app>" and "show me <window>": Windows has a
+# "Settings" app too, which "open windows settings" / "open sound settings" still reach.
+_SETTINGS = re.compile(
+    r"^(?:open|show|show me|bring up|pull up|go to|take me to)\s+(?:me\s+)?"
+    r"(?:(?:your|the|(?:touff|tuff|tough|toff)(?:'s|s)?)\s+){0,2}(?:own\s+)?(?:settings|preferences)"
+    r"(?:\s+(?:window|page|screen|menu|panel))?$"
+)
 _TIME = re.compile(r"^(?:what time is it|what's the time|whats the time|what is the time|time|tell me the time)$")
 _DATE = re.compile(r"^(?:what(?:'s| is) the date|what day is it|what's today|what is today|today's date|whats the date)$")
 _TIMER = re.compile(
@@ -132,6 +139,8 @@ def parse(text: str) -> Intent | None:
     for kind, pattern in _CHAT.items():
         if pattern.match(t):
             return Intent("chat", kind)
+    if _SETTINGS.match(t):
+        return Intent("open_settings")
     if _TIME.match(t):
         return Intent("time")
     if _DATE.match(t):

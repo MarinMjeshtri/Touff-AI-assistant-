@@ -128,6 +128,8 @@ class Router:
             return Reply(P.say(arg, name=name), source="chat")
         if k == "dismiss":
             return Reply(P.say("dismiss"), source="chat")
+        if k == "open_settings":
+            return Reply(P.say("settings"), [{"type": "open_settings", "arg": ""}], source="intent")
         if k == "time":
             return Reply(time.strftime("It's %I:%M %p.").replace(" 0", " ").lstrip("0"), source="intent")
         if k == "date":
@@ -343,6 +345,7 @@ _VERBS: dict[str, str | Callable[[str], str]] = {
     "volume": "turn the volume {}",
     "timer": "start a {} second timer",
     "run_command": "run {}",
+    "open_settings": "open my settings",
     "window": _window_phrase,
     "hotkey": "press {}",
     "lock_pc": "lock the computer",

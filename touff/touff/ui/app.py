@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import webview
 
 from .. import autostart
+from ..actions import windows as win32
 from ..actions.registry import ACTIONS
 from ..brain.claude_cli import BrainError
 from ..audio.expressive import available as expressive_available
@@ -242,14 +243,18 @@ class Api:
 
 
 class DesktopApp:
-    def __init__(self, assistant: "Assistant"):
+    def __init__(self, assistant: "Assistant", show_settings: bool = False):
         self.assistant = assistant
         self.store = assistant.store
         self.popup = None
         self.settings = None
         self.tray = None
         self.ui = PopupUI(self)
+        self.show_settings_on_start = show_settings  # a manual launch: open the window she lives in
+        self.ready = threading.Event()  # the GUI loop is running and the windows exist
+        self._opening = threading.Lock()
         assistant.ui = self.ui
+        assistant.executor.on_open_settings = self.open_settings  # "open your settings" by voice
 
     # -- windows ---------------------------------------------------------------
 
@@ -261,15 +266,46 @@ class DesktopApp:
             pass
 
     def open_settings(self) -> None:
-        if self.settings is None:
+        """Show settings in front of the user: on the monitor under the mouse, restored, focused.
+        Safe from any thread (tray, voice loop, a second launch)."""
+        if not self.ready.wait(60) or self.settings is None:
             return
-        self.settings.show()
-        self._round_corners()
+        with self._opening:
+            hwnd = self._settings_hwnd()  # 0 until the first show: WinForms creates the window lazily
+            was_visible = bool(hwnd) and win32.is_visible(hwnd)
+            self.settings.show()
+            try:
+                self.settings.restore()  # in case it was minimized from the custom title bar
+            except Exception:
+                pass
+            for _ in range(20):
+                hwnd = hwnd or self._settings_hwnd()
+                if hwnd:
+                    break
+                time.sleep(0.05)
+            if hwnd:
+                try:
+                    # Already open on the monitor she's looking at? Leave it where she put it.
+                    win32.center_under_cursor(hwnd, unless_already_there=was_visible)
+                    if not win32.focus(hwnd):
+                        log.info("Windows wouldn't let the settings window come to the front")
+                except Exception:
+                    log.exception("couldn't place the settings window")
+            self._round_corners()
+            try:
+                self.settings.evaluate_js("reload()")
+            except Exception:
+                pass
+
+    def open_settings_async(self) -> None:
+        threading.Thread(target=self.open_settings, name="open-settings", daemon=True).start()
+
+    @staticmethod
+    def _settings_hwnd() -> int:
         try:
-            self.settings.restore()  # in case it was minimized from the custom title bar
-            self.settings.evaluate_js("reload()")
+            return win32.find_own_window(SETTINGS_TITLE)
         except Exception:
-            pass
+            return 0
 
     def _keep_settings(self) -> bool:
         """Closing settings just hides it; the assistant keeps running in the tray."""
@@ -292,13 +328,13 @@ class DesktopApp:
         self.settings.events.closing += self._keep_settings
         webview.start(self._boot, debug="--debug" in sys.argv)
 
-    @staticmethod
-    def _round_corners() -> None:
+    @classmethod
+    def _round_corners(cls) -> None:
         """Ask Windows 11 for rounded corners on the frameless settings window (no-op elsewhere)."""
         try:
             import ctypes
 
-            hwnd = ctypes.windll.user32.FindWindowW(None, SETTINGS_TITLE)
+            hwnd = cls._settings_hwnd()
             if hwnd:
                 pref = ctypes.c_int(2)  # DWMWA_WINDOW_CORNER_PREFERENCE = 33 -> DWMWCP_ROUND
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
@@ -308,9 +344,10 @@ class DesktopApp:
     def _boot(self) -> None:
         self._round_corners()
         self._start_tray()
+        self.ready.set()
         threading.Thread(target=self._level_pump, daemon=True).start()
-        if "--settings" in sys.argv:
-            self.open_settings()
+        if self.show_settings_on_start:
+            self.open_settings_async()
         self.ui.show("idle")
         self.ui.status("Waking up...")
         try:
@@ -356,14 +393,16 @@ class DesktopApp:
             else:
                 self.assistant.paused.set()
 
+        # Left-click runs the default item: opening her is what people expect from a tray icon.
         menu = pystray.Menu(
-            pystray.MenuItem("Talk to Touff", lambda: self.assistant.talk_now.set(), default=True),
-            pystray.MenuItem("Settings", lambda: self.open_settings()),
+            pystray.MenuItem("Open Touff", lambda: self.open_settings_async(), default=True),
+            pystray.MenuItem("Talk to Touff", lambda: self.assistant.talk_now.set()),
             pystray.MenuItem("Mute mic", toggle_mute, checked=lambda item: self.assistant.paused.is_set()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self.quit()),
         )
-        self.tray = pystray.Icon("touff", tray_image(), "Touff", menu)
+        name = self.store.config.get("name") or "Touff"
+        self.tray = pystray.Icon("touff", tray_image(), f"Touff: say '{name}' or click to open", menu)
         self.tray.run_detached()
 
     def quit(self) -> None:
