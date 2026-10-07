@@ -1,461 +1,336 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="dark light">
 <title>Touff settings</title>
-<style>
-  :root {
-    --bg: #14121f; --panel: #1d1a2c; --panel2: #262238; --line: #332e4a; --ink: #efeaff; --dim: #a59cc4;
-    --acc: #a774ff; --acc2: #ff7cc8; --ok: #5fdca0; --warn: #ffb35c; --bad: #ff6f91;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
-    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
-  body { display: flex; }
-  button, input, select, textarea { font: inherit; color: inherit; }
-  nav { width: 200px; flex: none; padding: 20px 12px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
-  .logo { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; cursor: pointer; }
-  .logo .b { width: 38px; height: 38px; border-radius: 52% 48% 46% 54% / 55% 50% 50% 45%;
-    background: radial-gradient(circle at 34% 28%, #e6d2ff, #a774ff 45%, #6c3cf0); position: relative; transition: transform .15s; }
-  .logo .b:active { transform: scale(.9); }
-  .logo .b::before, .logo .b::after { content: ""; position: absolute; top: 14px; width: 5px; height: 8px; border-radius: 50%; background: #1d1430; }
-  .logo .b::before { left: 12px; } .logo .b::after { right: 12px; }
-  .logo h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
-  .logo small { display: block; color: var(--dim); font-size: 11px; }
-  nav a { padding: 9px 12px; border-radius: 10px; color: var(--dim); cursor: pointer; display: flex; gap: 10px; align-items: center; }
-  nav a:hover { background: var(--panel2); color: var(--ink); }
-  nav a.on { background: linear-gradient(90deg, rgba(167, 116, 255, .25), rgba(167, 116, 255, .05)); color: var(--ink); }
-  nav .spacer { flex: 1; }
-  nav .hint { color: var(--dim); font-size: 11px; padding: 0 12px; }
-  main { flex: 1; overflow-y: auto; padding: 28px 34px 60px; }
-  section { display: none; max-width: 860px; }
-  section.on { display: block; }
-  h2 { margin: 0 0 4px; font-size: 22px; }
-  .sub { color: var(--dim); margin: 0 0 20px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
-  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .grow { flex: 1; min-width: 0; }
-  label.f { display: block; color: var(--dim); font-size: 12px; margin: 12px 0 5px; }
-  input[type=text], input[type=number], select, textarea { width: 100%; background: var(--panel2); border: 1px solid var(--line);
-    border-radius: 9px; padding: 8px 10px; outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--acc); }
-  textarea { resize: vertical; min-height: 64px; }
-  input[type=range] { width: 100%; accent-color: var(--acc); }
-  .btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 14px; cursor: pointer; white-space: nowrap; }
-  .btn:hover { border-color: var(--acc); }
-  .btn.p { background: linear-gradient(135deg, var(--acc), #7d4dff); border-color: transparent; color: #fff; font-weight: 600; }
-  .btn.d { color: var(--bad); }
-  .btn.s { padding: 4px 9px; font-size: 12px; }
-  .chip { display: inline-block; padding: 2px 9px; margin: 2px 4px 2px 0; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); font-size: 12px; }
-  .chip.acc { border-color: rgba(167, 116, 255, .5); color: #d7c4ff; }
-  .muted { color: var(--dim); font-size: 12px; }
-  .badge { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: var(--panel2); color: var(--dim); }
-  .badge.claude { color: #ffb38a; } .badge.command { color: var(--acc2); } .badge.intent { color: var(--ok); }
-  .toggle { display: flex; align-items: center; gap: 10px; margin: 12px 0; cursor: pointer; }
-  .toggle input { width: 38px; height: 22px; appearance: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; position: relative; cursor: pointer; transition: .2s; flex: none; }
-  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--dim); transition: .2s; }
-  .toggle input:checked { background: var(--acc); border-color: var(--acc); }
-  .toggle input:checked::after { left: 18px; background: #fff; }
-  .list .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
-  .list .item:first-child { border-top: none; }
-  .act-row { display: grid; grid-template-columns: 190px 1fr auto; gap: 8px; margin-bottom: 8px; }
-  .talk { display: flex; gap: 10px; }
-  .reply { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--panel2); display: none; }
-  .reply.on { display: block; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
-  .toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 30px); opacity: 0; background: #2d2546; border: 1px solid var(--acc);
-    padding: 10px 18px; border-radius: 12px; transition: .3s; pointer-events: none; z-index: 9; }
-  .toast.on { opacity: 1; transform: translate(-50%, 0); }
-  .dev { border-color: rgba(255, 111, 145, .45); background: linear-gradient(160deg, rgba(255, 111, 145, .08), var(--panel) 50%); }
-  .empty { color: var(--dim); text-align: center; padding: 24px; }
-  .hist td { padding: 8px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-  .hist { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .hist th { text-align: left; color: var(--dim); font-weight: 500; padding: 0 8px 6px; font-size: 12px; }
-  .warn { color: var(--warn); }
-  .ok { color: var(--ok); }
-</style>
+<link rel="stylesheet" href="settings.css">
 </head>
 <body>
-<nav>
-  <div class="logo" id="logo" title="Hi!">
-    <div class="b"></div>
-    <div><h1 id="brand">Touff</h1><small>tiny desktop sidekick</small></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="grain"></div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="logo" id="logo" title="Hi!">
+      <div class="mini-blob" id="logoBlob"><i class="e l"></i><i class="e r"></i></div>
+      <div><h1 id="brand">Touff</h1><small>tiny desktop sidekick</small></div>
+    </div>
+    <nav id="nav">
+      <div class="ind" id="navInd"></div>
+      <a data-tab="home" class="on" tabindex="0" title="Home"><i data-icon="home"></i><span>Home</span></a>
+      <a data-tab="commands" tabindex="0" title="Commands"><i data-icon="zap"></i><span>Commands</span></a>
+      <a data-tab="memories" tabindex="0" title="Memories"><i data-icon="book"></i><span>Memories</span></a>
+      <a data-tab="apps" tabindex="0" title="Apps"><i data-icon="grid"></i><span>Apps</span></a>
+      <a data-tab="history" tabindex="0" title="History"><i data-icon="history"></i><span>History</span></a>
+      <a data-tab="settings" tabindex="0" title="Settings"><i data-icon="sliders"></i><span>Settings</span></a>
+      <a data-tab="developer" id="devtab" class="evil-link" tabindex="0" title="Developer" style="display:none"><i data-icon="devil"></i><span>Developer</span><em class="tag">secret</em></a>
+    </nav>
+    <div class="side-fill pywebview-drag-region"></div>
+    <div class="side-foot">
+      <div class="mini-status" id="miniStatus"><span class="dot"></span><div><b>Starting up</b><span>loading her brain...</span></div></div>
+      <div class="side-hint">Closing this window keeps Touff running in the tray.</div>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="titlebar">
+      <div class="drag pywebview-drag-region"><span class="crumb" id="crumb"><span class="nm">Touff</span> &nbsp;/&nbsp; <b>Home</b></span></div>
+      <div class="winbtns">
+        <button id="winMin" title="Minimize"><i data-icon="minus"></i></button>
+        <button id="winClose" class="close" title="Close (Touff keeps running in the tray)"><i data-icon="x"></i></button>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- HOME -->
+      <section id="home" class="on">
+        <div class="card hero">
+          <div class="hero-blob">
+            <div class="halo"></div><div class="ring"></div>
+            <div class="blob" id="heroBlob" title="boop">
+              <div class="shine"></div>
+              <div class="face" id="heroFace">
+                <div class="eye l"></div><div class="eye r"></div>
+                <div class="cheek l"></div><div class="cheek r"></div>
+                <div class="mouth"></div>
+              </div>
+            </div>
+          </div>
+          <div class="hero-text">
+            <div class="eyebrow" id="greet">Hello</div>
+            <h2>Hey, it's <span class="nm grad">Touff</span></h2>
+            <p class="sub">Say "<b class="nm">Touff</b>" any time, or type to her below.</p>
+            <div class="hero-chips" id="heroChips"></div>
+          </div>
+          <div class="talk-wrap">
+            <button class="talk-btn" id="talkNow"><i data-icon="mic"></i>Talk</button>
+          </div>
+        </div>
+
+        <div class="card palette">
+          <div class="pal-input">
+            <i data-icon="sparkles"></i>
+            <input type="text" id="tryText" placeholder="Tell her something... open spotify, set a timer, remember that gg means good game" autocomplete="off" spellcheck="false">
+            <kbd>Ctrl K</kbd>
+            <button class="btn p" id="trySend" title="Send (Enter)"><i data-icon="arrowUp"></i></button>
+          </div>
+          <div class="reply" id="tryReply"></div>
+          <div class="pal-sugg" id="sugg"><span class="lbl">Things to try</span></div>
+        </div>
+
+        <div class="tiles" id="statusCard"></div>
+      </section>
+
+      <!-- COMMANDS -->
+      <section id="commands">
+        <div class="head">
+          <div class="grow"><h2>Commands</h2><p class="sub">Your own phrases. Say any of them and she does the whole list.</p></div>
+          <button class="btn p" id="newCmd"><i data-icon="plus"></i>New command</button>
+        </div>
+        <div id="cmdEditor"></div>
+        <div id="cmdList"></div>
+      </section>
+
+      <!-- MEMORIES -->
+      <section id="memories">
+        <div class="head"><div class="grow"><h2>Memories</h2><p class="sub">Your words and what they mean, plus anything she should keep in mind.</p></div></div>
+        <div class="mem-grid">
+          <div class="card">
+            <div class="card-head"><div class="ico-tile"><i data-icon="tag"></i></div>
+              <div class="grow"><h3>Glossary</h3><p class="muted">"the sack" → "The Binding of Isaac". Applied before she tries to understand you.</p></div></div>
+            <div id="glossList" class="list" style="margin-top:6px"></div>
+            <div class="add-row">
+              <input type="text" id="gTerm" class="grow" placeholder="when I say...">
+              <input type="text" id="gMeaning" class="grow" placeholder="...I mean">
+              <button class="btn p icon" id="gAdd" title="Add"><i data-icon="plus"></i></button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="ico-tile"><i data-icon="note"></i></div>
+              <div class="grow"><h3>Notes</h3><p class="muted">Facts and preferences ("I like Eminem more than 50 Cent"). Used by the big brain.</p></div></div>
+            <div id="noteList" class="list" style="margin-top:6px"></div>
+            <div class="add-row">
+              <input type="text" id="nText" class="grow" placeholder="Something she should remember">
+              <button class="btn p icon" id="nAdd" title="Add"><i data-icon="plus"></i></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- APPS -->
+      <section id="apps">
+        <div class="head">
+          <div class="grow"><h2>Apps</h2><p class="sub">Everything she can open by name. Give things nicknames!</p></div>
+          <button class="btn" id="rescan"><i data-icon="refresh"></i>Rescan</button>
+        </div>
+        <div class="toolbar">
+          <div class="field"><i data-icon="search"></i><input type="text" id="appFilter" placeholder="Filter..." autocomplete="off" spellcheck="false"></div>
+          <div class="seg" id="kindSeg">
+            <i class="seg-ind"></i>
+            <button data-v="">All</button><button data-v="start">Apps</button><button data-v="steam">Steam</button><button data-v="url">Sites</button><button data-v="folder">Folders</button>
+          </div>
+        </div>
+        <div class="count" id="appCount"></div>
+        <div class="card list" id="appList" style="padding:8px 12px"></div>
+      </section>
+
+      <!-- HISTORY -->
+      <section id="history">
+        <div class="head"><div class="grow"><h2>History</h2><p class="sub">What she heard and what she did. Turn anything into a command.</p></div></div>
+        <div class="card" id="histTable" style="padding:14px 12px"></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="settings">
+        <div class="head"><div class="grow"><h2>Settings</h2><p class="sub">Changes save instantly.</p></div></div>
+
+        <div class="group-title">Name &amp; wake word</div>
+        <div class="group">
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="tag"></i></div>
+            <div class="stxt"><b>Her name</b><span>What she's called, and what she answers to.</span></div>
+            <div class="sctl w"><input type="text" data-cfg="name" spellcheck="false"></div>
+          </div>
+          <div class="srow stack">
+            <div class="ico-tile"><i data-icon="wave"></i></div>
+            <div class="stxt"><b>Also listen for</b><span>Sound-alikes, comma separated. Handy when her name isn't a real word.</span></div>
+            <div class="sctl w"><input type="text" id="wakeWords" spellcheck="false"></div>
+            <div class="sbelow">
+              <div class="muted" id="wakeInfo"></div>
+              <button class="btn s" id="suggestWake" style="margin-top:8px"><i data-icon="sparkles"></i>Suggest sound-alikes for this name</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="group-title">Voice <span class="faint" id="engineNow" style="font-weight:400"></span></div>
+        <div class="group">
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="sparkles"></i></div>
+            <div class="stxt"><b>Voice engine</b><span data-seg-desc="voice_engine"></span></div>
+            <div class="sctl"><div class="seg" data-seg="voice_engine"><i class="seg-ind"></i>
+              <button data-v="auto" data-d="Expressive if the GPU voice is installed, otherwise lightweight.">Auto</button>
+              <button data-v="expressive" data-d="Laughs, shouts, cries. Runs on your GPU.">Expressive</button>
+              <button data-v="piper" data-d="Calm and instant. Runs on your CPU.">Lightweight</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="file"></i></div>
+            <div class="stxt"><b>Expressive voice clip</b><span>A .wav of someone talking, 10-20 s. Optional: blank = default voice.</span></div>
+            <div class="sctl w"><input type="text" data-cfg="voice_clip" placeholder="C:\path\to\voice.wav" spellcheck="false"></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="feather"></i></div>
+            <div class="stxt"><b>Lightweight voice</b><span>Used when the expressive voice is off or not installed.</span></div>
+            <div class="sctl w"><select data-cfg="voice" id="voiceSel"></select></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="gauge"></i></div>
+            <div class="stxt"><b>Speed</b><span>How fast she talks.</span></div>
+            <div class="sctl"><div class="slider"><output></output><input type="range" min="0.7" max="1.5" step="0.05" data-cfg="speech_speed" data-num data-out="spdV"></div><span class="sval" id="spdV"></span></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="volume"></i></div>
+            <div class="stxt"><b>Volume</b><span>Her volume, on top of the Windows volume.</span></div>
+            <div class="sctl"><div class="slider"><output></output><input type="range" min="0.3" max="2" step="0.05" data-cfg="volume" data-num data-out="volV"></div><span class="sval" id="volV"></span></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="play"></i></div>
+            <div class="stxt"><b>Preview</b><span>Hear how she sounds right now.</span></div>
+            <div class="sctl"><button class="btn" id="preview"><i data-icon="play"></i>Preview voice</button></div>
+          </div>
+        </div>
+
+        <div class="group-title">Listening</div>
+        <div class="group">
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="mic"></i></div>
+            <div class="stxt"><b>Microphone</b><span>Applies after restarting Touff.</span></div>
+            <div class="sctl w"><select data-cfg="mic_device" id="micSel"></select></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="ear"></i></div>
+            <div class="stxt"><b>Ears</b><span data-seg-desc="stt_engine"></span></div>
+            <div class="sctl"><div class="seg" data-seg="stt_engine"><i class="seg-ind"></i>
+              <button data-v="auto" data-d="Speech recognition on the GPU if it's installed.">Auto</button>
+              <button data-v="gpu" data-d="Whisper large-v3-turbo on the GPU. The best ears.">GPU</button>
+              <button data-v="cpu" data-d="Whisper small on the CPU. No GPU needed.">CPU</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="timer"></i></div>
+            <div class="stxt"><b>Pause that ends listening</b><span>How long a silence means you're done talking.</span></div>
+            <div class="sctl"><div class="slider"><output></output><input type="range" min="400" max="2500" step="100" data-cfg="silence_ms" data-num data-out="silV"></div><span class="sval" id="silV"></span></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="bell"></i></div>
+            <div class="stxt"><b>Chime when she wakes up</b><span>A little sound so you know she's listening.</span></div>
+            <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="chime"><i></i></label></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="message"></i></div>
+            <div class="stxt"><b>Show the pop-up</b><span>Her face in the corner while she listens and talks.</span></div>
+            <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="popup"><i></i></label></div>
+          </div>
+        </div>
+
+        <div class="group-title">Big brain</div>
+        <div class="group">
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="cpu"></i></div>
+            <div class="stxt"><b>Brain</b><span>Simple stuff is understood instantly on your PC. Anything fuzzy goes to Claude through your own Claude Code login (no API key).</span></div>
+            <div class="sctl"><div class="seg" data-seg="brain"><i class="seg-ind"></i>
+              <button data-v="claude">Claude Code</button><button data-v="offline">Offline only</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="brainy"></i></div>
+            <div class="stxt"><b>Claude model</b><span data-seg-desc="claude_model"></span></div>
+            <div class="sctl"><div class="seg" data-seg="claude_model"><i class="seg-ind"></i>
+              <button data-v="haiku" data-d="Fastest. Great for quick stuff.">Haiku</button>
+              <button data-v="sonnet" data-d="Smarter, a bit slower.">Sonnet</button>
+              <button data-v="opus" data-d="Smartest, but slow.">Opus</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="plug"></i></div>
+            <div class="stxt"><b>Connection</b><span id="brainMsg">Make sure Claude Code is installed and logged in.</span></div>
+            <div class="sctl"><button class="btn" id="checkBrain"><i data-icon="refresh"></i>Check connection</button></div>
+          </div>
+        </div>
+
+        <div class="group-title">System</div>
+        <div class="group">
+          <div class="srow">
+            <div class="ico-tile"><i data-icon="power"></i></div>
+            <div class="stxt"><b>Start with Windows</b><span>She'll be in the tray, ready, when you log in.</span></div>
+            <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="start_with_windows"><i></i></label></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DEVELOPER -->
+      <section id="developer">
+        <div class="card lair">
+          <div class="devil">
+            <div class="horn l"></div><div class="horn r"></div><div class="tail"></div>
+            <div class="blob"><div class="shine"></div><div class="face">
+              <div class="brow l"></div><div class="brow r"></div>
+              <div class="eye l"></div><div class="eye r"></div>
+              <div class="cheek l"></div><div class="cheek r"></div><div class="mouth"></div></div></div>
+          </div>
+          <div class="grow">
+            <div class="eyebrow" style="font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#ff8da1">Restricted area</div>
+            <h2><span class="glitch" data-t="Developer">Developer</span></h2>
+            <p class="sub">You found the secret menu. Nobody else gets a say in here.</p>
+          </div>
+        </div>
+
+        <div class="dev">
+          <div class="group-title">Feisty mode</div>
+          <div class="group">
+            <div class="srow">
+              <div class="ico-tile"><i data-icon="flame"></i></div>
+              <div class="stxt"><b>Free will</b><span>She can refuse, roast you, counter-offer, and make you argue for it. Needs the big brain. She still can only use the safe action list.</span></div>
+              <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="feisty_mode"><i></i></label></div>
+            </div>
+            <div class="srow">
+              <div class="ico-tile"><i data-icon="gauge"></i></div>
+              <div class="stxt"><b>How often she pushes back</b><span>0% = angel. 100% = good luck.</span></div>
+              <div class="sctl"><div class="slider"><output></output><input type="range" min="0" max="100" step="5" data-cfg="feisty_level" data-num data-out="feistyV"></div><span class="sval" id="feistyV"></span></div>
+            </div>
+            <div class="srow">
+              <div class="ico-tile"><i data-icon="skull"></i></div>
+              <div class="stxt"><b>Allow swearing</b><span>Spicy language. Don't say she didn't warn you.</span></div>
+              <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="feisty_swearing"><i></i></label></div>
+            </div>
+          </div>
+
+          <div class="group-title">Debugging</div>
+          <div class="group">
+            <div class="srow stack">
+              <div class="ico-tile"><i data-icon="bug"></i></div>
+              <div class="stxt"><b>Save my last 30 recordings</b><span>To replay what she misheard.</span></div>
+              <div class="sctl"><label class="toggle"><input type="checkbox" data-cfg="save_recordings"><i></i></label></div>
+              <div class="sbelow"><div class="danger-note"><i data-icon="folder"></i><div>Saved in <code class="selectable">%APPDATA%\Touff\recordings</code>, named after what she thought you said.</div></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
-  <a data-tab="home" class="on">🏠 Home</a>
-  <a data-tab="commands">⚡ Commands</a>
-  <a data-tab="memories">🧠 Memories</a>
-  <a data-tab="apps">📦 Apps</a>
-  <a data-tab="history">📜 History</a>
-  <a data-tab="settings">⚙️ Settings</a>
-  <a data-tab="developer" id="devtab" style="display:none">😈 Developer</a>
-  <div class="spacer"></div>
-  <div class="hint">Closing this window keeps Touff running in the tray.</div>
-</nav>
+</div>
 
-<main>
-  <!-- HOME -->
-  <section id="home" class="on">
-    <h2>Hey, it's <span class="nm">Touff</span> 👋</h2>
-    <p class="sub">Say "<b class="nm">Touff</b>" any time, or type to her below.</p>
-    <div class="card">
-      <div class="talk">
-        <input type="text" id="tryText" class="grow" placeholder="e.g. open spotify · search google for tacos · remember that gg means good game">
-        <button class="btn p" id="trySend">Send</button>
-        <button class="btn" id="talkNow">🎙️ Talk</button>
-      </div>
-      <div class="reply" id="tryReply"></div>
-    </div>
-    <div class="card" id="statusCard"></div>
-    <div class="card">
-      <b>Things to try</b>
-      <p class="muted" style="margin:6px 0 0">
-        "open binding of isaac" · "play lose yourself on spotify" · "next song" · "set a timer for 5 minutes" ·
-        "when I say boot up the sack, open binding of isaac" · "what time is it" · "tell me a joke"
-      </p>
-    </div>
-  </section>
+<div class="toasts" id="toasts"></div>
 
-  <!-- COMMANDS -->
-  <section id="commands">
-    <div class="row"><div class="grow"><h2>Commands</h2><p class="sub">Your own phrases. Say any of them and she does the whole list.</p></div>
-      <button class="btn p" id="newCmd">+ New command</button></div>
-    <div id="cmdEditor"></div>
-    <div class="card list" id="cmdList"></div>
-  </section>
+<div class="modal" id="modal">
+  <div class="box">
+    <h3 id="mTitle"></h3>
+    <p id="mText"></p>
+    <input type="text" id="mInput" autocomplete="off" spellcheck="false">
+    <div class="row"><button class="btn" id="mCancel">Cancel</button><button class="btn p" id="mOk">Save</button></div>
+  </div>
+</div>
 
-  <!-- MEMORIES -->
-  <section id="memories">
-    <h2>Memories</h2>
-    <p class="sub">Your words and what they mean, plus anything she should keep in mind.</p>
-    <div class="card">
-      <b>Glossary</b> <span class="muted">— "the sack" → "The Binding of Isaac". Applied before she tries to understand you.</span>
-      <div id="glossList" class="list" style="margin-top:8px"></div>
-      <div class="row" style="margin-top:10px">
-        <input type="text" id="gTerm" class="grow" placeholder="when I say...">
-        <input type="text" id="gMeaning" class="grow" placeholder="...I mean">
-        <button class="btn p" id="gAdd">Add</button>
-      </div>
-    </div>
-    <div class="card">
-      <b>Notes</b> <span class="muted">— facts and preferences ("I like Eminem more than 50 Cent"). Used by the big brain.</span>
-      <div id="noteList" class="list" style="margin-top:8px"></div>
-      <div class="row" style="margin-top:10px">
-        <input type="text" id="nText" class="grow" placeholder="Something she should remember">
-        <button class="btn p" id="nAdd">Add</button>
-      </div>
-    </div>
-  </section>
+<div class="rz r" data-dir="r"></div><div class="rz b" data-dir="b"></div><div class="rz rb" data-dir="rb"></div>
 
-  <!-- APPS -->
-  <section id="apps">
-    <div class="row"><div class="grow"><h2>Apps</h2><p class="sub">Everything she can open by name. Give things nicknames!</p></div>
-      <button class="btn" id="rescan">↻ Rescan</button></div>
-    <input type="text" id="appFilter" placeholder="Filter..." style="margin-bottom:12px">
-    <div class="card list" id="appList"></div>
-  </section>
-
-  <!-- HISTORY -->
-  <section id="history">
-    <h2>History</h2>
-    <p class="sub">What she heard and what she did. Turn anything into a command.</p>
-    <div class="card"><table class="hist" id="histTable"></table></div>
-  </section>
-
-  <!-- SETTINGS -->
-  <section id="settings">
-    <h2>Settings</h2>
-    <p class="sub">Changes save instantly.</p>
-    <div class="card">
-      <b>Name & wake word</b>
-      <div class="grid2">
-        <div><label class="f">Her name</label><input type="text" data-cfg="name"></div>
-        <div><label class="f">Also listen for (sound-alikes, comma separated)</label><input type="text" id="wakeWords"></div>
-      </div>
-      <p class="muted" id="wakeInfo"></p>
-      <button class="btn s" id="suggestWake">Suggest sound-alikes for this name</button>
-    </div>
-    <div class="card">
-      <b>Voice</b> <span class="muted" id="engineNow"></span>
-      <div class="grid2">
-        <div><label class="f">Engine</label><select data-cfg="voice_engine">
-          <option value="auto">Auto (expressive if the GPU voice is installed)</option>
-          <option value="expressive">Expressive: laughs, shouts, cries (GPU)</option>
-          <option value="piper">Lightweight: calm, instant (CPU)</option></select></div>
-        <div><label class="f">Expressive voice clip (.wav, 10-20 s, optional)</label><input type="text" data-cfg="voice_clip" placeholder="C:\path	ooice.wav (blank = default voice)"></div>
-        <div><label class="f">Lightweight voice</label><select data-cfg="voice" id="voiceSel"></select></div>
-        <div><label class="f">Microphone</label><select data-cfg="mic_device" id="micSel"></select></div>
-        <div><label class="f">Ears (speech recognition)</label><select data-cfg="stt_engine">
-          <option value="auto">Auto (GPU if installed)</option>
-          <option value="gpu">GPU: Whisper large-v3-turbo (best)</option>
-          <option value="cpu">CPU: Whisper small (no GPU needed)</option></select></div>
-        <div><label class="f">Speed <span id="spdV"></span></label><input type="range" min="0.7" max="1.5" step="0.05" data-cfg="speech_speed" data-num></div>
-        <div><label class="f">Volume <span id="volV"></span></label><input type="range" min="0.3" max="2" step="0.05" data-cfg="volume" data-num></div>
-      </div>
-      <div class="row" style="margin-top:10px"><button class="btn s" id="preview">▶ Preview voice</button></div>
-      <label class="toggle"><input type="checkbox" data-cfg="chime"> Chime when she wakes up</label>
-      <label class="toggle"><input type="checkbox" data-cfg="popup"> Show the pop-up</label>
-      <label class="f">Pause that ends listening (ms)</label><input type="number" min="400" max="2500" step="100" data-cfg="silence_ms" data-num>
-    </div>
-    <div class="card">
-      <b>Big brain</b>
-      <p class="muted">Simple stuff is understood instantly on your PC. Anything fuzzy goes to Claude through your own Claude Code login (no API key).</p>
-      <div class="grid2">
-        <div><label class="f">Brain</label><select data-cfg="brain"><option value="claude">Claude Code (smart)</option><option value="offline">Offline only (instant, simple)</option></select></div>
-        <div><label class="f">Claude model</label><select data-cfg="claude_model"><option value="haiku">Haiku (fastest)</option><option value="sonnet">Sonnet (smarter)</option><option value="opus">Opus (smartest, slow)</option></select></div>
-      </div>
-      <div class="row" style="margin-top:10px"><button class="btn s" id="checkBrain">Check connection</button><span class="muted" id="brainMsg"></span></div>
-    </div>
-    <div class="card">
-      <label class="toggle"><input type="checkbox" data-cfg="start_with_windows"> Start with Windows</label>
-    </div>
-  </section>
-
-  <!-- DEVELOPER -->
-  <section id="developer">
-    <h2>Developer 😈</h2>
-    <p class="sub">You found the secret menu. Nobody else gets a say in here.</p>
-    <div class="card dev">
-      <b>Feisty mode</b>
-      <p class="muted">She gets free will: can refuse, roast you, counter-offer, and make you argue for it. Needs the big brain. She still can only use the safe action list.</p>
-      <label class="toggle"><input type="checkbox" data-cfg="feisty_mode"> Free will</label>
-      <label class="f">How often she pushes back: <span id="feistyV"></span>%</label>
-      <input type="range" min="0" max="100" step="5" data-cfg="feisty_level" data-num>
-      <label class="toggle"><input type="checkbox" data-cfg="feisty_swearing"> Allow swearing 🤬</label>
-    </div>
-    <div class="card dev">
-      <b>Debugging</b>
-      <label class="toggle"><input type="checkbox" data-cfg="save_recordings"> Save my last 30 recordings (to replay what she misheard)</label>
-      <p class="muted">Saved in %APPDATA%&#92;Touff&#92;recordings, named after what she thought you said.</p>
-ecordings, named after what she thought you said.</p>
-    </div>
-  </section>
-</main>
-<div class="toast" id="toast"></div>
-
-<script>
-let S = null; // everything from Python
-const api = () => window.pywebview.api;
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 2200); }
-
-// -- tabs --
-document.querySelectorAll("nav a[data-tab]").forEach((a) => a.onclick = () => showTab(a.dataset.tab));
-function showTab(name) {
-  document.querySelectorAll("nav a").forEach((x) => x.classList.toggle("on", x.dataset.tab === name));
-  document.querySelectorAll("section").forEach((x) => x.classList.toggle("on", x.id === name));
-}
-
-// -- secret developer menu: poke the blob 5 times --
-let pokes = 0, pokeTimer;
-$("logo").onclick = async () => {
-  pokes++; clearTimeout(pokeTimer); pokeTimer = setTimeout(() => pokes = 0, 1500);
-  const b = document.querySelector(".logo .b"); b.style.transform = `rotate(${(pokes % 2 ? 1 : -1) * pokes * 6}deg)`; setTimeout(() => b.style.transform = "", 150);
-  if (pokes === 5 && !S.config.dev_unlocked) { S = await api().save_config({ dev_unlocked: true }); render(); toast("😈 Developer mode unlocked"); showTab("developer"); }
-  else if (pokes === 3 && !S.config.dev_unlocked) toast("hey, that tickles");
-};
-
-// -- loading --
-async function reload() { S = await api().get_all(); render(); }
-window.addEventListener("pywebviewready", reload);
-setInterval(() => { if (S && !S.ready) reload(); }, 3000);
-
-function render() {
-  const c = S.config;
-  document.querySelectorAll(".nm").forEach((e) => e.textContent = c.name);
-  $("brand").textContent = c.name;
-  $("devtab").style.display = c.dev_unlocked ? "" : "none";
-  renderStatus(); renderConfig(); renderCommands(); renderMemories(); renderApps(); renderHistory();
-}
-
-function renderStatus() {
-  const w = S.wake;
-  const bits = [];
-  bits.push(S.ready ? `<span class="ok">● Listening</span> for ${w ? w.listening_for.map((x) => `<span class="chip acc">${esc(x)}</span>`).join("") : "..."}` : `<span class="warn">● Starting up...</span>`);
-  if (w && w.unknown.length) bits.push(`<span class="muted">Not in my vocabulary (ignored): ${w.unknown.map(esc).join(", ")}</span>`);
-  bits.push(S.brain_installed ? `Big brain: <b>${S.config.brain === "claude" ? "Claude " + S.config.claude_model : "off"}</b>` : `<span class="warn">Claude Code not found: running on the small brain only.</span>`);
-  if (S.config.feisty_mode) bits.push(`<span style="color:var(--bad)">😈 Feisty mode is ON (${S.config.feisty_level}%)</span>`);
-  $("statusCard").innerHTML = bits.join("<br>");
-}
-
-// -- home --
-$("trySend").onclick = tryIt;
-$("tryText").onkeydown = (e) => { if (e.key === "Enter") tryIt(); };
-$("talkNow").onclick = () => api().talk_now();
-async function tryIt() {
-  const text = $("tryText").value.trim(); if (!text) return;
-  const r = $("tryReply"); r.classList.add("on"); r.innerHTML = `<span class="muted">thinking...</span>`;
-  const out = await api().try_text(text);
-  r.innerHTML = `<div>💬 ${esc(out.say) || "<i class=muted>(no words, just did it)</i>"}</div>` +
-    (out.actions.length ? `<div class="muted" style="margin-top:6px">${out.actions.map((a) => `<span class="chip">${esc(a.type)} ${esc(a.arg)}</span>`).join("")}</div>` : "") +
-    `<div style="margin-top:6px"><span class="badge ${out.source}">${out.source}</span></div>`;
-  $("tryText").value = ""; reload();
-}
-
-// -- settings --
-function renderConfig() {
-  const c = S.config;
-  $("voiceSel").innerHTML = S.voices.map((v) => `<option value="${v.id}">${esc(v.label)}</option>`).join("");
-  $("micSel").innerHTML = `<option value="">System default</option>` + S.mics.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("");
-  document.querySelectorAll("[data-cfg]").forEach((el) => {
-    const v = c[el.dataset.cfg];
-    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
-  });
-  $("wakeWords").value = (c.wake_words || []).join(", ");
-  $("engineNow").textContent = S.ready ? `· speaking with the ${S.voice_engine_active === "expressive" ? "expressive GPU" : "lightweight"} voice` +
-    (!S.expressive_installed ? " (expressive voice not installed)" : "") : "";
-  $("spdV").textContent = c.speech_speed + "×"; $("volV").textContent = Math.round(c.volume * 100) + "%"; $("feistyV").textContent = c.feisty_level;
-  const w = S.wake;
-  $("wakeInfo").innerHTML = w ? `Currently listening for: ${w.listening_for.map((x) => `<span class="chip acc">${esc(x)}</span>`).join("")}` +
-    (w.unknown.length ? ` <span class="warn">· "${w.unknown.map(esc).join('", "')}" isn't a word my ears know, so sound-alikes do the work.</span>` : "") : "";
-}
-document.querySelectorAll("[data-cfg]").forEach((el) => {
-  el.addEventListener(el.type === "range" ? "input" : "change", async () => {
-    let v = el.type === "checkbox" ? el.checked : el.value;
-    if ("num" in el.dataset) v = Number(v);
-    if (el.dataset.cfg === "mic_device") v = v === "" ? null : Number(v);
-    if (el.type === "range") { // live labels; save when released
-      if (el.dataset.cfg === "speech_speed") $("spdV").textContent = v + "×";
-      if (el.dataset.cfg === "volume") $("volV").textContent = Math.round(v * 100) + "%";
-      if (el.dataset.cfg === "feisty_level") $("feistyV").textContent = v;
-      clearTimeout(el._h); el._h = setTimeout(() => save(el.dataset.cfg, v), 350); return;
-    }
-    save(el.dataset.cfg, v);
-  });
-});
-async function save(key, value) {
-  S = await api().save_config({ [key]: value }); render();
-  if (["voice", "voice_engine", "voice_clip", "stt_engine"].includes(key)) toast("Switching voice... she'll say something when ready");
-  else if (key === "mic_device") toast("Mic change applies after restarting Touff");
-  else toast("Saved ✓");
-}
-$("wakeWords").onchange = () => save("wake_words", $("wakeWords").value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
-$("suggestWake").onclick = async () => {
-  const s = await api().suggest_wake(S.config.name);
-  if (!s.length) return toast("Couldn't find sound-alikes. Try spelling it like it sounds!");
-  $("wakeWords").value = s.join(", "); $("wakeWords").onchange(); toast("Found: " + s.join(", "));
-};
-const PREVIEWS = ["[happy] Hi, I'm {n}! How do I sound?", "[angry] I am NOT playing Candy Shop!", "[crying] You're closing me already? [sniff]",
-  "[whispering] Psst. I can whisper too.", "[sarcastic] Oh wow, another Google search. [sigh] Thrilling.", "[dramatic] Booting up... the sack! [laugh]"];
-let prevIdx = 0;
-$("preview").onclick = () => api().preview_voice(PREVIEWS[prevIdx++ % PREVIEWS.length].replace("{n}", S.config.name));
-$("checkBrain").onclick = async () => { $("brainMsg").textContent = "asking Claude..."; $("brainMsg").textContent = await api().check_brain(); };
-
-// -- commands --
-let editing = null;
-$("newCmd").onclick = () => editCommand({ id: "", name: "", phrases: [], actions: [{ type: "open_app", arg: "" }], reply: "" });
-function actionLabel(a) { return `${a.type.replace(/_/g, " ")}${a.arg ? ": " + a.arg : ""}`; }
-function renderCommands() {
-  const list = $("cmdList");
-  if (!S.commands.length) { list.innerHTML = `<div class="empty">No commands yet. Make one, or say "when I say X, do Y".</div>`; return; }
-  list.innerHTML = S.commands.map((c, i) => `
-    <div class="item"><div class="grow">
-      <b>${esc(c.name)}</b><div>${c.phrases.map((p) => `<span class="chip acc">"${esc(p)}"</span>`).join("")}</div>
-      <div class="muted">→ ${c.actions.map((a) => esc(actionLabel(a))).join(" → ") || "nothing"}${c.reply ? ` · says "${esc(c.reply)}"` : ""}</div>
-    </div>
-    <button class="btn s" onclick="runCmd(${i})">▶</button>
-    <button class="btn s" onclick="editCommand(S.commands[${i}])">Edit</button></div>`).join("");
-}
-async function runCmd(i) { const p = await api().run_actions(S.commands[i].actions); toast(p.length ? p[0] : "Done ✓"); }
-function editCommand(cmd) {
-  editing = JSON.parse(JSON.stringify(cmd));
-  const types = Object.keys(S.actions);
-  const appNames = S.apps.map((a) => `<option value="${esc(a.name)}">`).join("");
-  const rows = () => editing.actions.map((a, i) => `
-    <div class="act-row">
-      <select onchange="editing.actions[${i}].type=this.value; drawEditor()">${types.map((t) => `<option ${t === a.type ? "selected" : ""}>${t}</option>`).join("")}</select>
-      <input type="text" list="appNames" value="${esc(a.arg)}" placeholder="${esc(S.actions[a.type]?.arg || "")}" oninput="editing.actions[${i}].arg=this.value">
-      <button class="btn s d" onclick="editing.actions.splice(${i},1); drawEditor()">✕</button>
-    </div>`).join("");
-  window.drawEditor = () => {
-    $("cmdEditor").innerHTML = `<div class="card" style="border-color:var(--acc)">
-      <div class="grid2">
-        <div><label class="f">Name</label><input type="text" id="eName" value="${esc(editing.name)}" placeholder="Isaac time"></div>
-        <div><label class="f">She says (optional)</label><input type="text" id="eReply" value="${esc(editing.reply)}" placeholder="Booting up the sack!"></div>
-      </div>
-      <label class="f">Phrases that trigger it (one per line)</label>
-      <textarea id="ePhrases" placeholder="boot up the sack">${esc(editing.phrases.join("\n"))}</textarea>
-      <label class="f">What to do, in order</label>${rows()}
-      <datalist id="appNames">${appNames}</datalist>
-      <div class="row" style="margin-top:6px">
-        <button class="btn s" onclick="keepFields(); editing.actions.push({type:'open_app',arg:''}); drawEditor()">+ Add step</button>
-        <div class="grow"></div>
-        ${editing.id ? `<button class="btn d" onclick="deleteCmd()">Delete</button>` : ""}
-        <button class="btn" onclick="$('cmdEditor').innerHTML=''">Cancel</button>
-        <button class="btn" onclick="keepFields(); api().run_actions(editing.actions).then(p=>toast(p.length?p[0]:'Ran it ✓'))">Test</button>
-        <button class="btn p" onclick="saveCmd()">Save</button>
-      </div></div>`;
-  };
-  window.keepFields = () => {
-    editing.name = $("eName").value; editing.reply = $("eReply").value;
-    editing.phrases = $("ePhrases").value.split("\n").map((x) => x.trim()).filter(Boolean);
-  };
-  drawEditor(); showTab("commands"); $("cmdEditor").scrollIntoView({ behavior: "smooth" });
-}
-async function saveCmd() {
-  keepFields();
-  if (!editing.phrases.length) return toast("Give it at least one phrase");
-  const cmds = S.commands.filter((c) => c.id !== editing.id);
-  const idx = S.commands.findIndex((c) => c.id === editing.id);
-  cmds.splice(idx < 0 ? cmds.length : idx, 0, editing);
-  S.commands = await api().save_commands(cmds);
-  $("cmdEditor").innerHTML = ""; renderCommands(); toast(`Saved! Try saying "${editing.phrases[0]}"`);
-}
-async function deleteCmd() {
-  S.commands = await api().save_commands(S.commands.filter((c) => c.id !== editing.id));
-  $("cmdEditor").innerHTML = ""; renderCommands(); toast("Deleted");
-}
-
-// -- memories --
-function renderMemories() {
-  const m = S.memories;
-  $("glossList").innerHTML = m.glossary.length ? m.glossary.map((g, i) =>
-    `<div class="item"><div class="grow"><span class="chip acc">${esc(g.term)}</span> → ${esc(g.meaning)}</div><button class="btn s d" onclick="delGloss(${i})">✕</button></div>`).join("")
-    : `<div class="muted">Nothing yet.</div>`;
-  $("noteList").innerHTML = m.notes.length ? m.notes.map((n, i) =>
-    `<div class="item"><div class="grow">${esc(n)}</div><button class="btn s d" onclick="delNote(${i})">✕</button></div>`).join("")
-    : `<div class="muted">Nothing yet.</div>`;
-}
-async function saveMem() { S.memories = await api().save_memories(S.memories); renderMemories(); }
-function delGloss(i) { S.memories.glossary.splice(i, 1); saveMem(); }
-function delNote(i) { S.memories.notes.splice(i, 1); saveMem(); }
-$("gAdd").onclick = () => {
-  const term = $("gTerm").value.trim(), meaning = $("gMeaning").value.trim(); if (!term || !meaning) return;
-  S.memories.glossary.push({ term, meaning }); $("gTerm").value = $("gMeaning").value = ""; saveMem(); toast("Learned ✓");
-};
-$("nAdd").onclick = () => { const t = $("nText").value.trim(); if (!t) return; S.memories.notes.push(t); $("nText").value = ""; saveMem(); toast("Noted ✓"); };
-
-// -- apps --
-const KIND = { steam: "🎮 Steam", start: "🪟 App", url: "🌐 Website", folder: "📁 Folder" };
-function renderApps() {
-  const f = $("appFilter").value.toLowerCase();
-  const apps = S.apps.filter((a) => !f || a.name.toLowerCase().includes(f)).slice(0, 300);
-  $("appList").innerHTML = apps.map((a) => `<div class="item"><div class="grow">${esc(a.name)}</div><span class="badge">${KIND[a.kind] || a.kind}</span>
-    <button class="btn s" onclick="nickname('${esc(a.name).replace(/'/g, "\\'")}')">Nickname</button></div>`).join("") || `<div class="empty">No matches.</div>`;
-}
-$("appFilter").oninput = renderApps;
-$("rescan").onclick = async () => { toast("Scanning..."); const n = await api().rescan_apps(); await reload(); toast(`Found ${n} things`); };
-function nickname(name) {
-  const nick = prompt(`What do you call "${name}"?`); if (!nick) return;
-  S.memories.glossary.push({ term: nick, meaning: name }); saveMem(); toast(`"${nick}" → ${name}`);
-}
-
-// -- history --
-function renderHistory() {
-  const h = S.history;
-  $("histTable").innerHTML = h.length ? `<tr><th>When</th><th>You said</th><th>She said / did</th><th></th></tr>` + h.map((x, i) => `
-    <tr><td class="muted" style="white-space:nowrap">${esc(x.time.slice(5, 16))}</td>
-    <td>${esc(x.heard)}</td>
-    <td>${esc(x.said)}${x.actions.length ? `<div>${x.actions.map((a) => `<span class="chip">${esc(actionLabel(a))}</span>`).join("")}</div>` : ""}
-      <span class="badge ${x.source}">${x.source}</span></td>
-    <td><button class="btn s" onclick="fromHistory(${i})" title="Make this a command">+ Cmd</button></td></tr>`).join("")
-    : `<tr><td class="empty">Nothing yet. Go talk to her!</td></tr>`;
-}
-function fromHistory(i) {
-  const x = S.history[i];
-  editCommand({ id: "", name: x.heard, phrases: [x.heard], actions: x.actions.length ? x.actions : [{ type: "open_app", arg: "" }], reply: "" });
-}
-</script>
+<script src="settings.js"></script>
 </body>
 </html>

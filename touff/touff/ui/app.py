@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 WEB = Path(__file__).parent / "web"
 POPUP_W, POPUP_H = 380, 190
+SETTINGS_TITLE = "Touff settings"
+SETTINGS_MIN = (720, 520)
 
 GREETINGS = [
     "[happy] {name} online. Missed me?",
@@ -190,6 +192,21 @@ class Api:
         if self._a.ready.is_set():
             threading.Thread(target=self._a.speak, args=(text,), daemon=True).start()
 
+    # -- frameless settings window chrome (custom title bar buttons + resize grip) --
+
+    def minimize_settings(self) -> None:
+        if self._app.settings is not None:
+            self._app.settings.minimize()
+
+    def hide_settings(self) -> None:
+        """The title bar's close button: hide only, Touff keeps running in the tray."""
+        if self._app.settings is not None:
+            self._app.settings.hide()
+
+    def resize_settings(self, width: int, height: int) -> None:
+        if self._app.settings is not None:
+            self._app.settings.resize(max(SETTINGS_MIN[0], int(width)), max(SETTINGS_MIN[1], int(height)))
+
 
 class DesktopApp:
     def __init__(self, assistant: "Assistant"):
@@ -214,7 +231,9 @@ class DesktopApp:
         if self.settings is None:
             return
         self.settings.show()
+        self._round_corners()
         try:
+            self.settings.restore()  # in case it was minimized from the custom title bar
             self.settings.evaluate_js("reload()")
         except Exception:
             pass
@@ -231,14 +250,30 @@ class DesktopApp:
             frameless=True, transparent=True, on_top=True, hidden=True, focus=False,
             resizable=False, shadow=False, easy_drag=False, background_color="#000000",
         )
+        # Frameless: the page draws its own title bar (drag region + minimize/close buttons).
         self.settings = webview.create_window(
-            "Touff settings", url=str(WEB / "settings.html"), js_api=api, width=980, height=720,
-            min_size=(720, 520), hidden=True, background_color="#14121f",
+            SETTINGS_TITLE, url=str(WEB / "settings.html"), js_api=api, width=980, height=720,
+            min_size=SETTINGS_MIN, hidden=True, background_color="#0b0a12",
+            frameless=True, easy_drag=False, shadow=True,
         )
         self.settings.events.closing += self._keep_settings
         webview.start(self._boot, debug="--debug" in sys.argv)
 
+    @staticmethod
+    def _round_corners() -> None:
+        """Ask Windows 11 for rounded corners on the frameless settings window (no-op elsewhere)."""
+        try:
+            import ctypes
+
+            hwnd = ctypes.windll.user32.FindWindowW(None, SETTINGS_TITLE)
+            if hwnd:
+                pref = ctypes.c_int(2)  # DWMWA_WINDOW_CORNER_PREFERENCE = 33 -> DWMWCP_ROUND
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
+        except Exception:
+            pass
+
     def _boot(self) -> None:
+        self._round_corners()
         self._start_tray()
         threading.Thread(target=self._level_pump, daemon=True).start()
         if "--settings" in sys.argv:
