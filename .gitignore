@@ -18,3 +18,7 @@ GoldPen.ex5
 
 # Portable Python used by the venvs (uv python install)
 touff/.python/
+
+# PyInstaller / Inno Setup output (touff/packaging/build.ps1)
+touff/packaging/build/
+touff/packaging/dist/

@@ -101,6 +101,7 @@ class Api:
 
     def __init__(self, app: "DesktopApp"):
         self._app = app
+        self._pack: dict[str, Any] = {"state": "idle", "log": [], "message": ""}
 
     @property
     def _a(self) -> "Assistant":
@@ -130,6 +131,7 @@ class Api:
             "brain_installed": a.brain.available,
             "expressive_installed": expressive_available(),
             "voice_engine_active": "expressive" if type(a.voice).__name__ == "ExpressiveVoice" else "piper",
+            "voice_pack": self.voice_pack_status(),
             "ready": a.ready.is_set(),
         }
 
@@ -184,6 +186,37 @@ class Api:
                 "not_logged_in": "Claude Code isn't logged in. Open a terminal, run `claude`, and log in once.",
                 "timeout": "Claude took too long to answer.",
             }.get(err.reason, f"Something went wrong: {err}")
+
+    # -- expressive voice pack (GPU), installed on demand ------------------------
+
+    def voice_pack_status(self) -> dict[str, Any]:
+        return {**self._pack, "log": self._pack["log"][-6:], "installed": expressive_available()}
+
+    def install_voice_pack(self) -> dict[str, Any]:
+        if self._pack["state"] != "installing":
+            self._pack = {"state": "installing", "log": ["Starting..."], "message": ""}
+            threading.Thread(target=self._install_pack, daemon=True).start()
+        return self.voice_pack_status()
+
+    def _install_pack(self) -> None:
+        from .. import voicepack
+
+        def progress(line: str) -> None:
+            self._pack["log"].append(line.strip()[:160])
+            del self._pack["log"][:-40]
+
+        try:
+            voicepack.install(progress, whisper=self._app.store.config.get("gpu_whisper_model", "large-v3-turbo"))
+        except voicepack.VoicePackError as exc:
+            self._pack.update(state="error", message=str(exc))
+            return
+        except Exception as exc:  # network hiccups, disk full...
+            log.exception("voice pack install failed")
+            self._pack.update(state="error", message=f"Something went wrong: {exc}")
+            return
+        self._pack.update(state="done", message="Installed! Switching to my new voice...")
+        if self._a.ready.is_set():
+            self._swap_voice()
 
     def talk_now(self) -> None:
         self._a.talk_now.set()

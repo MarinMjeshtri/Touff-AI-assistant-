@@ -300,7 +300,30 @@ function setSeg(seg, value) {
   const key = seg.dataset.seg;
   if (key) { const on = seg.querySelector("button.on"), d = document.querySelector(`[data-seg-desc="${key}"]`); if (d) d.textContent = on?.dataset.d || ""; }
 }
+function renderPack() {
+  const p = S.voice_pack || {};
+  const btn = $("packBtn"), logBox = $("packLog");
+  if (!btn) return;
+  const busy = p.state === "installing";
+  btn.disabled = busy || p.installed;
+  btn.innerHTML = p.installed ? icon("check") + "Installed" : busy ? icon("refresh", "spin") + "Installing..." : icon("plus") + (p.state === "error" ? "Try again" : "Install");
+  btn.classList.toggle("p", !p.installed);
+  logBox.hidden = !(busy || p.state === "error" || p.state === "done");
+  logBox.querySelector("pre").textContent = p.message || (p.log || []).join("
+");
+  logBox.querySelector("pre").className = p.state === "error" ? "bad" : "muted";
+  clearTimeout(renderPack._t);
+  if (busy) renderPack._t = setTimeout(async () => { S.voice_pack = await api().voice_pack_status(); renderPack(); if (S.voice_pack.state === "done") reload(); }, 1500);
+}
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest("#packBtn")) return;
+  S.voice_pack = await api().install_voice_pack();
+  toast("Building my expressive voice. This takes a while, grab a snack!", "info");
+  renderPack();
+});
+
 function renderConfig() {
+  renderPack();
   const c = S.config;
   $("voiceSel").innerHTML = S.voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
   $("micSel").innerHTML = `<option value="">System default</option>` + S.mics.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("");

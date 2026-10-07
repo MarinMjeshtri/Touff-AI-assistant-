@@ -574,3 +574,5 @@ code { font: 12px Consolas, "Cascadia Code", monospace; padding: 1px 6px; border
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
 }
+
+.i.spin { animation: spin 1s linear infinite; }

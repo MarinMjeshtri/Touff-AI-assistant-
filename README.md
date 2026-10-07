@@ -22,7 +22,16 @@ Every sentence goes through three steps, cheapest first:
 
 Risky actions (lock, sleep, shutdown) always need a spoken "yes".
 
-## Setup
+## Install
+
+1. Download **`Touff-Setup-<version>.exe`** from the [latest release](https://github.com/MarinMjeshtri/Touff-AI-assistant-/releases/latest) and run it. No admin needed: she installs just for you, in `%LOCALAPPDATA%\Programs\Touff`. (No installer? The `Touff-<version>-portable.zip` works too: unzip anywhere and run `Touff.exe`.)
+2. **The first launch downloads her models once** (~600 MB: wake word, speech recognition, lightweight voice) into `%LOCALAPPDATA%\Touff\models`, with progress in the pop-up. She greets you when everything is ready.
+3. **Big brain (optional):** install [Claude Code](https://docs.claude.com/en/docs/claude-code), run `claude` once in a terminal and log in. Touff uses that login, no API key.
+4. **Expressive voice pack (recommended if you have an NVIDIA GPU):** much faster, sharper ears (Whisper large on the GPU, ~0.3 s per sentence instead of ~2 s on the CPU) and the expressive voice that laughs, sighs and shouts. Press *Install voice pack* in Settings, or run `touff-cli.exe --install-voice-pack` from the install folder. It builds a separate GPU environment (PyTorch + Chatterbox + Whisper large: ~5 GB of packages plus ~5 GB of models) in `%LOCALAPPDATA%\Touff\voice-pack`. Without an NVIDIA card she politely sticks to the lightweight voice.
+
+She lives in the tray: click the tray icon to talk without the wake word, or right-click it for Settings. The installer can start her with Windows; Settings can change that later. Logs: `%APPDATA%\Touff\touff.log`. Uninstalling removes the app, models and voice pack, and asks before deleting your settings and memories.
+
+## Setup from source
 
 Requires Windows 11 and [uv](https://docs.astral.sh/uv/).
 
@@ -57,12 +66,24 @@ cd touff
 .venv\Scripts\python -m touff --console                         # voice loop, logs in terminal
 ```
 
+### Build the installer
+
+```powershell
+cd touff
+uv pip install --python .venv\Scripts\python.exe -e ".[dev,build]"
+powershell -ExecutionPolicy Bypass -File packaging\build.ps1
+```
+
+Output lands in `touff/packaging/dist`: the `Touff` app folder (`Touff.exe` plus `touff-cli.exe` with a console), `Touff-<version>-portable.zip`, and `Touff-Setup-<version>.exe` if [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed. The version comes from `touff/touff/__init__.py`. Pushing a `v*` tag runs the same build on GitHub Actions and attaches both files to a release.
+
 | Where | What |
 |---|---|
 | `touff/touff/brain/` | glossary, fuzzy matching, intents, router, Claude CLI bridge, personality |
 | `touff/touff/actions/` | the safe action list, app and Steam index |
 | `touff/touff/audio/` | mic + VAD, Vosk wake word, faster-whisper, Piper, expressive voice client |
-| `touff/touff/voice_server.py` | GPU voice worker (runs in `.venv-voice`) |
+| `touff/touff/voice_server.py` | GPU voice worker (runs in `.venv-voice` / the voice pack) |
 | `touff/touff/ui/` | pop-up blob, settings app, tray icon |
+| `touff/touff/voicepack.py` | installs the optional GPU voice environment |
+| `touff/packaging/` | PyInstaller spec, Inno Setup script, build script |
 
-User data (config, commands, memories, history) is plain JSON in `%APPDATA%\Touff`. Models live in `touff/models/` (git-ignored).
+User data (config, commands, memories, history) is plain JSON in `%APPDATA%\Touff`. From source, models live in `touff/models/` (git-ignored); the installed app keeps them in `%LOCALAPPDATA%\Touff\models`.

@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+build = ["pyinstaller>=6.10"]
 
 [project.scripts]
 touff = "touff.__main__:main"

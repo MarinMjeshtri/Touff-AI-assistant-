@@ -11,6 +11,8 @@ stay tiny. Talks JSON lines over stdin/stdout:
   <- {"id": 2, "text": "open chrome on my second monitor"}
   -> {"cmd": "clip", "path": "my_voice.wav"}                      clone a voice from a clip ("" = default)
 
+With --download-only it just fetches the model weights and exits (voice pack install).
+
 Speech recognition and synthesis run on separate threads, so hearing the user never
 waits behind a sentence being generated. Standalone: imports nothing from touff.
 """
@@ -39,10 +41,38 @@ HALLUCINATIONS = {
 }
 
 
+def _cached_snapshot(repo_id: str) -> str | None:
+    """Local folder of an already-downloaded Hugging Face model, if complete enough to load."""
+    home = os.environ.get("HF_HOME") or os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+    snaps = os.path.join(home, "hub", "models--" + repo_id.replace("/", "--"), "snapshots")
+    if not os.path.isdir(snaps):
+        return None
+    for name in sorted(os.listdir(snaps), key=lambda n: os.path.getmtime(os.path.join(snaps, n)), reverse=True):
+        path = os.path.join(snaps, name)
+        if any(f.endswith(".safetensors") for f in os.listdir(path)) and os.path.exists(os.path.join(path, "conds.pt")):
+            return path
+    return None
+
+
 def send(msg: dict) -> None:
     with _send_lock:
         _proto.write(json.dumps(msg) + "\n")
         _proto.flush()
+
+
+def download(args: argparse.Namespace) -> None:
+    """Fetch the weights the next real start will load, so that start doesn't wait for GBs."""
+    if args.engine == "turbo":
+        from chatterbox.tts_turbo import REPO_ID
+        from huggingface_hub import snapshot_download
+
+        print("Downloading Chatterbox Turbo...", flush=True)
+        snapshot_download(repo_id=REPO_ID, allow_patterns=["*.safetensors", "*.json", "*.txt", "*.pt", "*.model"])
+    if args.stt != "none":
+        from faster_whisper import download_model
+
+        print(f"Downloading Whisper {args.stt}...", flush=True)
+        download_model(args.stt, cache_dir=args.models or None)
 
 
 def main() -> None:
@@ -51,33 +81,51 @@ def main() -> None:
     parser.add_argument("--stt", default="large-v3-turbo", help="Whisper model, or 'none'")
     parser.add_argument("--models", default="", help="folder for Whisper downloads")
     parser.add_argument("--clip", default="")
+    parser.add_argument("--download-only", action="store_true")
     args = parser.parse_args()
+    if args.download_only:
+        download(args)
+        return
 
     import numpy as np
     import torch  # also puts CUDA/cuDNN DLLs on the path for ctranslate2
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    tts = None
-    if args.engine != "none":
+    def load_tts():
+        if args.engine == "none":
+            return None
         if args.engine == "turbo":
-            from chatterbox.tts_turbo import ChatterboxTurboTTS as Model
+            from chatterbox.tts_turbo import REPO_ID, ChatterboxTurboTTS as Model
         else:
-            from chatterbox.tts import ChatterboxTTS as Model
-        tts = Model.from_pretrained(device=device)
+            from chatterbox.tts import REPO_ID, ChatterboxTTS as Model
+        # Already downloaded? Load straight from disk instead of asking Hugging Face first.
+        local = _cached_snapshot(REPO_ID)
+        model = Model.from_local(local, device) if local and hasattr(Model, "from_local") else Model.from_pretrained(device=device)
         if args.clip and os.path.exists(args.clip):
-            tts.prepare_conditionals(args.clip)
-    default_conds = tts.conds if tts else None
+            model.prepare_conditionals(args.clip)
+        return model
 
-    stt = None
-    if args.stt != "none":
+    def load_stt():
+        if args.stt == "none":
+            return None
         from faster_whisper import WhisperModel
 
-        stt = WhisperModel(
-            args.stt, device=device, compute_type="int8_float16" if device == "cuda" else "int8",
-            download_root=args.models or None,
-        )
-        stt.transcribe(np.zeros(16000, dtype=np.float32), language="en")  # warm up
+        kwargs = dict(device=device, compute_type="int8_float16" if device == "cuda" else "int8", download_root=args.models or None)
+        try:
+            model = WhisperModel(args.stt, local_files_only=True, **kwargs)
+        except Exception:  # not downloaded yet
+            model = WhisperModel(args.stt, **kwargs)
+        model.transcribe(np.zeros(16000, dtype=np.float32), language="en")  # warm up
+        return model
+
+    # Load the voice and the ears side by side: startup is the slower of the two, not the sum.
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(2) as pool:
+        tts_job, stt_job = pool.submit(load_tts), pool.submit(load_stt)
+        tts, stt = tts_job.result(), stt_job.result()
+    default_conds = tts.conds if tts else None
 
     out_dir = tempfile.mkdtemp(prefix="touff_voice_")
     tts_q: queue.Queue = queue.Queue()

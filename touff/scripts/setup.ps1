@@ -24,7 +24,7 @@ if ($Expressive) {
     Write-Host "3/4 Expressive GPU voice (.venv-voice, ~3 GB)" -ForegroundColor Magenta
     uv venv .venv-voice --python $py --allow-existing
     uv pip install --python .venv-voice\Scripts\python.exe torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
-    uv pip install --python .venv-voice\Scripts\python.exe chatterbox-tts
+    uv pip install --python .venv-voice\Scripts\python.exe chatterbox-tts faster-whisper
 } else {
     Write-Host "3/4 Skipping expressive voice (add -Expressive to install it)" -ForegroundColor DarkGray
 }

@@ -1,4 +1,4 @@
-"""Client for the GPU worker (voice_server.py running in .venv-voice).
+"""Client for the GPU worker (voice_server.py running in the voice pack's Python, see voicepack.py).
 
 GpuServer owns the process. ExpressiveVoice and RemoteSTT sit on top of it with the
 same interfaces as the CPU versions (tts.Voice / stt.STT), so the assistant doesn't
@@ -14,16 +14,15 @@ import queue
 import re
 import subprocess
 import threading
-from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
-from ..store import PROJECT_ROOT, models_dir
+from .. import voicepack
+from ..store import models_dir
 
-VOICE_PYTHON = PROJECT_ROOT / ".venv-voice" / "Scripts" / "python.exe"
-SERVER = Path(__file__).resolve().parents[1] / "voice_server.py"
+SERVER = voicepack.SERVER
 
 # Tags the Turbo model performs. Everything else in [brackets] gets stripped
 # so it isn't read out loud.
@@ -35,7 +34,7 @@ _SENTENCE = re.compile(r"(?<=[.!?…])\s+(?=\S)")
 
 
 def available() -> bool:
-    return VOICE_PYTHON.exists()
+    return voicepack.installed()
 
 
 def clean_tags(text: str) -> str:
@@ -65,17 +64,18 @@ class GpuServer:
     def __init__(self, tts: bool, stt_model: str | None, clip: str = ""):
         env = dict(os.environ, HF_HOME=str(models_dir() / "hf"), HF_HUB_DISABLE_PROGRESS_BARS="1", PYTHONIOENCODING="utf-8")
         cmd = [
-            str(VOICE_PYTHON), str(SERVER),
+            str(voicepack.python_path()), str(SERVER),
             "--engine", "turbo" if tts else "none",
             "--stt", stt_model or "none",
             "--models", str(models_dir() / "whisper-gpu"),
         ]
         if clip:
             cmd += ["--clip", clip]
-        self.proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, encoding="utf-8", env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        with voicepack.clean_dll_search():
+            self.proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, encoding="utf-8", env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
         hello = self.proc.stdout.readline()  # blocks while models load (~20 s; first run downloads several GB)
         if not hello:
             raise RuntimeError("GPU voice server failed to start")

@@ -2,6 +2,7 @@
 
 Everything is plain JSON in %APPDATA%\\Touff so it can be edited by hand too.
 Set TOUFF_HOME to point the whole data directory somewhere else (tests do this).
+In the installed app (PyInstaller build) big models go to %LOCALAPPDATA%\\Touff instead.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -70,7 +72,14 @@ def data_dir() -> Path:
     return path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Installed app (PyInstaller build) vs. running from a source checkout.
+FROZEN = bool(getattr(sys, "frozen", False))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  # frozen: the bundle folder (sys._MEIPASS)
+
+
+def local_dir() -> Path:
+    """%LOCALAPPDATA%\\Touff: machine-local bulk data of the installed app (models, voice pack)."""
+    return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Touff"
 
 
 def models_dir() -> Path:
@@ -78,10 +87,10 @@ def models_dir() -> Path:
     which also keeps them out of AppData folders that sandboxed launchers redirect."""
     if os.environ.get("TOUFF_HOME"):
         path = Path(os.environ["TOUFF_HOME"]) / "models"
-    elif (PROJECT_ROOT / "pyproject.toml").exists():
+    elif not FROZEN and (PROJECT_ROOT / "pyproject.toml").exists():
         path = PROJECT_ROOT / "models"
     else:
-        path = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Touff" / "models"
+        path = local_dir() / "models"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

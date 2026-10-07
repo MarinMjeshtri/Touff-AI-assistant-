@@ -101,6 +101,9 @@ class Assistant:
         from .audio.wakeword import WakeWord
 
         cfg = self.store.config
+        # First run: fetch every model now, with progress in the pop-up, so nothing is
+        # downloaded later in the middle of a conversation.
+        models.ensure_all(cfg["voice"], cfg["whisper_model"], self.ui.status)
         self.ui.status("Waking up my ears...")
         self.wake = WakeWord(models.vosk_path(), self._wake_words())
         threading.Thread(target=self.brain.warm, daemon=True).start()
@@ -146,14 +149,14 @@ class Assistant:
 
         cfg = self.store.config
         self.ui.status("Warming up my voice...")
-        return Voice(models.voice_path(cfg["voice"]), cfg["speech_speed"], cfg["volume"])
+        return Voice(models.voice_path(cfg["voice"], self.ui.status), cfg["speech_speed"], cfg["volume"])
 
     def _cpu_stt(self):
         from . import models
         from .audio.stt import STT
 
         self.ui.status("Loading speech recognition...")
-        return STT(models.whisper_path(self.store.config["whisper_model"]))
+        return STT(models.whisper_path(self.store.config["whisper_model"], self.ui.status))
 
     def _wake_words(self) -> list[str]:
         cfg = self.store.config

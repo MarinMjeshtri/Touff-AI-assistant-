@@ -27,3 +27,13 @@ def set_enabled(enabled: bool) -> None:
                 winreg.DeleteValue(key, _NAME)
             except FileNotFoundError:
                 pass
+
+
+def is_enabled() -> bool:
+    """Whether a Run entry exists (the installer's "Start Touff with Windows" box sets one too)."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _KEY) as key:
+            winreg.QueryValueEx(key, _NAME)
+            return True
+    except OSError:
+        return False
