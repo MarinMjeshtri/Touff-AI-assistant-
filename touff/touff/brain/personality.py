@@ -21,6 +21,8 @@ LINES = {
         "Say that again?",
         "[sigh] My ears glitched. One more time?",
     ],
+    "silent_on": ["[whispering] Okay. I'll stay quiet.", "[whispering] Shh. Going silent.", "[whispering] Zipping it. Check the bubble."],
+    "silent_off": ["[happy] I'm back! Did you miss my voice?", "[happy] Finally, I can talk again!", "Voice is back on."],
     "dismiss": ["Okay!", "Never mind then.", "[sigh] Alright, I'll be here.", "[sarcastic] Cool cool cool."],
     "greet": ["[happy] Hey hey!", "[happy] Hi! What do you need?", "Hello there.", "Sup."],
     "thanks": ["[happy] Anytime!", "You're welcome!", "That's what I'm here for.", "[happy] Aww, stop it. [laugh]"],

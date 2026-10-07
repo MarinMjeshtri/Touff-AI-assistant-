@@ -107,6 +107,16 @@ _TIMER = re.compile(
 _HALF_HOUR = re.compile(r"^(?:set\s+)?(?:a\s+)?timer for half an hour$")
 _LEARN = re.compile(r"^(?:remember|learn|note|memorize|save)(?:\s+that)?\s+(?P<body>.+)$")
 _WHEN_I_SAY = re.compile(r"^when i say\s+.+")
+_SILENT_ON = re.compile(
+    r"^(?:(?:(?:stay|keep|go|remain)\s+(?:silent|quiet|mute)|be\s+(?:silent|mute))(?:\s+(?:for a while|for now|from now on|now))?"
+    r"|silent mode(?:\s+on)?|(?:turn on|enable|activate|switch on)\s+silent mode|(?:mute|silence)\s+yourself"
+    r"|(?:don't|do not) (?:talk|speak)(?: out loud)?(?: anymore)?|shh+ mode)$"
+)
+_SILENT_OFF = re.compile(
+    r"^(?:(?:you can|you may)\s+(?:talk|speak)(?:\s+(?:again|now|out loud))?|(?:start )?(?:talk|speak)(?:ing)?\s+again"
+    r"|silent mode off|(?:turn off|disable|deactivate|switch off)\s+silent mode|unmute yourself|un ?silence yourself"
+    r"|(?:stop|quit) being (?:silent|quiet))$"
+)
 _DISMISS = re.compile(r"^(?:never ?mind|cancel|nothing|forget it|stop|shut up|be quiet|go away|nvm|no|nah)$")
 _SYSTEM = {
     "lock_pc": re.compile(r"^lock (?:the |my )?(?:computer|pc|screen|laptop)$"),
@@ -143,6 +153,10 @@ def parse(text: str) -> Intent | None:
     if _LEARN.match(t) or _WHEN_I_SAY.match(t):
         body = _LEARN.match(t).group("body") if _LEARN.match(t) else t
         return Intent("learn", body)
+    if _SILENT_ON.match(t):
+        return Intent("silent", "on")
+    if _SILENT_OFF.match(t):
+        return Intent("silent", "off")
     if _DISMISS.match(t):
         return Intent("dismiss")
     for kind, pattern in _CHAT.items():

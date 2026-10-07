@@ -398,6 +398,11 @@ class DesktopApp:
             pystray.MenuItem("Open Touff", lambda: self.open_settings_async(), default=True),
             pystray.MenuItem("Talk to Touff", lambda: self.assistant.talk_now.set()),
             pystray.MenuItem("Mute mic", toggle_mute, checked=lambda item: self.assistant.paused.is_set()),
+            pystray.MenuItem(
+                "Silent mode (bubble only)",
+                lambda: self.store.update_config({"silent": not self.store.config.get("silent")}),
+                checked=lambda item: bool(self.store.config.get("silent")),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self.quit()),
         )

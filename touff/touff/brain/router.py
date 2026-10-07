@@ -126,6 +126,8 @@ class Router:
         k, arg = intent.kind, intent.arg
         if k == "chat":
             return Reply(P.say(arg, name=name), source="chat")
+        if k == "silent":
+            return Reply(P.say(f"silent_{arg}"), [{"type": "silent_mode", "arg": arg}], source="intent")
         if k == "dismiss":
             return Reply(P.say("dismiss"), source="chat")
         if k == "open_settings":
@@ -345,6 +347,7 @@ _VERBS: dict[str, str | Callable[[str], str]] = {
     "google_search": "google {}",
     "youtube_search": "search YouTube for {}",
     "youtube_play": "play {} on YouTube",
+    "silent_mode": "turn silent mode {}",
     "spotify_search": "find {} on Spotify",
     "media": "hit {}",
     "volume": "turn the volume {}",

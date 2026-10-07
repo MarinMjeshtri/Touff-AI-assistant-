@@ -36,6 +36,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "silence_ms": 1200,
     "max_listen_s": 12,
     "chime": True,
+    "silent": False,  # answer in the pop-up only: no voice, no chime
     "popup": True,
     "start_with_windows": False,
     # Developer settings

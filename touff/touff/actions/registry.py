@@ -35,6 +35,7 @@ ACTIONS: dict[str, ActionSpec] = {
     "open_url": ActionSpec("Open a web address in the browser", "URL"),
     "google_search": ActionSpec("Search Google", "search query"),
     "youtube_search": ActionSpec("Show YouTube search results (only when the user wants to browse results)", "search query"),
+    "silent_mode": ActionSpec("Silent mode: on = answer only in the pop-up bubble (no voice); off = talk again", "on | off"),
     "youtube_play": ActionSpec(
         "Open and play one specific YouTube video directly: a channel's newest upload, or the top result for a search",
         "latest:<channel name> | <search query>",
@@ -153,6 +154,11 @@ class Executor:
 
     def _do_google_search(self, query: str) -> str | None:
         webbrowser.open("https://www.google.com/search?q=" + quote_plus(query))
+        return None
+
+    def _do_silent_mode(self, arg: str) -> str | None:
+        on = arg.strip().lower() not in ("off", "false", "0", "no")
+        self.store.update_config({"silent": on})
         return None
 
     def _do_youtube_play(self, arg: str) -> str | None:

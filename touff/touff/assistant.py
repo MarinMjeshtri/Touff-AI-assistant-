@@ -120,6 +120,7 @@ class Assistant:
         self._mute_count = 0
         self._mute_lock = threading.Lock()
         self.busy = False
+        self._last_said = ""
         store.on_change(self._on_store_change)
         threading.Thread(target=self.apps.refresh, daemon=True).start()
 
@@ -210,8 +211,9 @@ class Assistant:
 
     # -- talking ---------------------------------------------------------------
 
-    def speak(self, text: str) -> None:
-        if not text or self.voice is None:
+    def speak(self, text: str, force: bool = False) -> None:
+        """Say it out loud, unless silent mode is on (then the pop-up bubble is the answer)."""
+        if not text or self.voice is None or (self.store.config.get("silent") and not force):
             return
         with self._mute_lock:
             self._mute_count += 1
@@ -238,7 +240,7 @@ class Assistant:
         self.ui.said(strip_tags(text))
         self.speak(text)
         if not self.busy:
-            self.ui.hide(2.5)
+            self.ui.hide(8.0 if self.store.config.get("silent") else 2.5)
 
     def _thinking(self) -> None:
         self.ui.show("thinking")
@@ -344,7 +346,7 @@ class Assistant:
         cfg = self.store.config
         try:
             self.ui.show("listening")
-            if cfg.get("chime"):
+            if cfg.get("chime") and not cfg.get("silent"):
                 chime("wake")
             pending: Reply | None = None
             for turn in range(4):  # a wake-up allows a few back-and-forths
@@ -382,8 +384,10 @@ class Assistant:
                     reply = self.handle_text(heard, pending)
                 sassy = cfg.get("feisty_mode") and reply.source == "claude" and not reply.actions
                 self.ui.show("sassy" if sassy else "speaking")
-                self.ui.said(strip_tags(reply.say))
-                self.speak(reply.say)
+                self._last_said = strip_tags(reply.say)
+                self.ui.said(self._last_said)
+                # Toggling silent mode is the one thing she always says out loud (a whisper going in).
+                self.speak(reply.say, force=any(a["type"] == "silent_mode" for a in reply.actions))
                 if not (reply.listen_again or reply.on_yes):
                     break
                 pending = reply if reply.on_yes else None
@@ -393,4 +397,5 @@ class Assistant:
             self.ui.said("Oops, something broke inside me.")
         finally:
             self.busy = False
-            self.ui.hide(2.0)
+            # Silent: leave the bubble up long enough to read it.
+            self.ui.hide(2.0 + (min(8.0, len(self._last_said) / 14) if cfg.get("silent") else 0))
