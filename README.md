@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File touff\scripts\setup.ps1             # l
 powershell -ExecutionPolicy Bypass -File touff\scripts\setup.ps1 -Expressive # + expressive GPU voice
 ```
 
-Then double-click **`Touff.cmd`**. She lives in the tray: click the tray icon to talk without the wake word, or right-click it for Settings.
+Then double-click **`touff\Touff.cmd`**. She lives in the tray: click the tray icon to talk without the wake word, or right-click it for Settings.
 
 For the big brain, run `claude` once in a terminal and log in.
 
@@ -58,10 +58,10 @@ cd touff
 
 | Where | What |
 |---|---|
-| `touff/brain/` | glossary, fuzzy matching, intents, router, Claude CLI bridge, personality |
-| `touff/actions/` | the safe action list, app and Steam index |
-| `touff/audio/` | mic + VAD, Vosk wake word, faster-whisper, Piper, expressive voice client |
-| `touff/voice_server.py` | GPU voice worker (runs in `.venv-voice`) |
-| `touff/ui/` | pop-up blob, settings app, tray icon |
+| `touff/touff/brain/` | glossary, fuzzy matching, intents, router, Claude CLI bridge, personality |
+| `touff/touff/actions/` | the safe action list, app and Steam index |
+| `touff/touff/audio/` | mic + VAD, Vosk wake word, faster-whisper, Piper, expressive voice client |
+| `touff/touff/voice_server.py` | GPU voice worker (runs in `.venv-voice`) |
+| `touff/touff/ui/` | pop-up blob, settings app, tray icon |
 
 User data (config, commands, memories, history) is plain JSON in `%APPDATA%\Touff`. Models live in `touff/models/` (git-ignored).
